@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.2';
+const VERSION = 'v1.0.3';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -1516,6 +1516,125 @@ function drawStartScreen() {
 }
 
 // ─────────────────────────────────────────────
+//  DRAW SCENE MOBILE — ultra-minimal diagnostic renderer
+//  Everything = flat fillRect/arc only, zero gradients, zero paths,
+//  zero particles, zero shadows. If STILL slow → problem is NOT rendering.
+// ─────────────────────────────────────────────
+function drawSceneMobile(now) {
+  const W = canvas.width, H = canvas.height;
+  const gY = getGY();
+
+  // ── Background: 2 solid rects only ──────────
+  ctx.fillStyle = '#5ab4e0';            // sky
+  ctx.fillRect(0, 0, W, gY);
+  ctx.fillStyle = '#5c3a1e';            // ground
+  ctx.fillRect(0, gY, W, H - gY);
+  ctx.fillStyle = '#78d63e';            // grass stripe
+  ctx.fillRect(0, gY, W, 6);
+
+  // ── Pickups: colored circles ─────────────────
+  const pickupColors = { fish: '#00cfff', paw: '#ff9900', heart: '#ff2244' };
+  pickups.forEach(p => {
+    if (p.done) return;
+    ctx.fillStyle = pickupColors[p.type] || '#fff';
+    ctx.beginPath();
+    ctx.arc(p.x + p.w/2, p.y + p.h/2 + Math.sin(p.ft)*6, 14, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // ── Obstacles: solid rects ───────────────────
+  obstacles.forEach(o => {
+    if (o.dead) return;
+    ctx.fillStyle = o.type === 'rock' ? '#9e9e9e' : '#2e7d32';
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    if (o.type === 'bush') {          // 3 red dots = spikes hint
+      ctx.fillStyle = '#e53935';
+      ctx.fillRect(o.x + 5,       o.y - 7, 6, 8);
+      ctx.fillRect(o.x + o.w/2-3, o.y - 9, 6, 10);
+      ctx.fillRect(o.x + o.w-11,  o.y - 7, 6, 8);
+    }
+  });
+
+  // ── Dinos: colored rects + eye ───────────────
+  dinos.forEach(d => {
+    if (d.dead) return;
+    const sc = d.maxHp > 1 ? 1.35 : 1.0;
+    const dw = d.w * sc, dh = d.h * sc;
+    const dx = d.x - (dw - d.w) * 0.5;
+    ctx.fillStyle = d.maxHp > 1 ? '#2e7d32' : '#4caf50';
+    ctx.fillRect(dx, d.y, dw, dh);
+    ctx.fillStyle = '#d50000';
+    ctx.fillRect(dx + 6, d.y + 8, 8, 8);          // eye
+    ctx.fillStyle = 'white';
+    ctx.fillRect(dx + 2, d.y + dh*0.38, dw*0.4, 6); // teeth strip
+    if (d.maxHp > 1) {                             // HP bar
+      ctx.fillStyle = '#b71c1c'; ctx.fillRect(dx, d.y - 8, dw, 4);
+      ctx.fillStyle = '#76ff03'; ctx.fillRect(dx, d.y - 8, dw * (d.hp/d.maxHp), 4);
+    }
+  });
+
+  // ── Bullets: small rects ─────────────────────
+  bullets.forEach(b => {
+    if (b.dead) return;
+    ctx.fillStyle = b.powered ? '#ff2200' : '#ffd700';
+    ctx.fillRect(b.x - b.r, b.y - b.r*0.5, b.r*2, b.r);
+  });
+
+  // ── Cat: 3 rects + 2 triangles (ears) ────────
+  const powered = now < powerupEnd;
+  const invinc  = now < invincEnd;
+  if (!(invinc && Math.floor(now/80)%2===0)) {
+    const cx = CAT_SCREEN_X, cy = catY;
+    ctx.fillStyle = powered ? '#ff6600' : '#f0922b';
+    ctx.fillRect(cx + 8,  cy + 22, 46, 30);           // body
+    ctx.fillRect(cx + 22, cy + 2,  38, 26);            // head
+    ctx.fillRect(cx + 20, cy - 10, 10, 14);            // left ear
+    ctx.fillRect(cx + 46, cy - 10, 10, 14);            // right ear
+    const lf = catOnGround ? Math.sin(catWalkFrame*1.6)*5 : 0;
+    ctx.fillRect(cx + 30, cy + 50, 9, 13 + lf);        // leg L
+    ctx.fillRect(cx + 46, cy + 50, 9, 13 - lf);        // leg R
+    ctx.fillStyle = powered ? '#ff0' : '#111';
+    ctx.fillRect(cx + 30, cy + 10, 6, 7);              // eye L
+    ctx.fillRect(cx + 46, cy + 10, 6, 7);              // eye R
+  }
+
+  // ── Minimal HUD ───────────────────────────────
+  // hearts as red/grey squares (fast)
+  for (let i = 0; i < 9; i++) {
+    ctx.fillStyle = i < lives ? '#ff2244' : '#555';
+    ctx.fillRect(10 + i*24, 8, 18, 18);
+  }
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${score} / ${targetScore}`, W/2, 24);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`Lv${level}`, W - 64, 24);
+  ctx.textAlign = 'left';
+  drawPauseBtn(now);
+
+  // power-up bars (flat rects only)
+  let by = 34;
+  if (now < powerupEnd) {
+    ctx.fillStyle = '#333'; ctx.fillRect(10, by, 140, 10);
+    ctx.fillStyle = '#ff4500'; ctx.fillRect(10, by, 140*(powerupEnd-now)/POWERUP_MS, 10);
+    by += 14;
+  }
+  if (now < doubleShootEnd) {
+    ctx.fillStyle = '#333'; ctx.fillRect(10, by, 140, 10);
+    ctx.fillStyle = '#ff9900'; ctx.fillRect(10, by, 140*(doubleShootEnd-now)/POWERUP_MS, 10);
+  }
+
+  // version
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(VERSION, 10, H - 8);
+  ctx.textBaseline = 'alphabetic';
+}
+
+// ─────────────────────────────────────────────
 //  GAME LOOP  (30fps cap on mobile)
 // ─────────────────────────────────────────────
 const FRAME_MIN_MS = IS_MOBILE ? 1000 / 30 : 0;
@@ -1541,14 +1660,18 @@ function loop(ts) {
 
   } else if (STATE === 'playing' || STATE === 'paused') {
     if (STATE === 'playing') update(ts, dt);
-    drawBackground();
-    pickups.forEach(drawPickup);
-    obstacles.forEach(drawObstacle);
-    dinos.forEach(drawDino);
-    drawBullets(ts);
-    drawCat(ts);
-    drawParticles();
-    drawHUD(ts);
+    if (IS_MOBILE) {
+      drawSceneMobile(ts);
+    } else {
+      drawBackground();
+      pickups.forEach(drawPickup);
+      obstacles.forEach(drawObstacle);
+      dinos.forEach(drawDino);
+      drawBullets(ts);
+      drawCat(ts);
+      drawParticles();
+      drawHUD(ts);
+    }
     if (STATE === 'paused') {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
       ctx.fillRect(0, 0, W, H);
