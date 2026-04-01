@@ -311,8 +311,8 @@ function initLevel() {
   catWalkFrame = 0;
   catY = getGY() - 54;
 
-  // seed clouds
-  for (let i = 0; i < 6; i++) {
+  // seed clouds — fewer on mobile
+  for (let i = 0; i < (IS_MOBILE ? 3 : 6); i++) {
     clouds.push({
       x: Math.random() * canvas.width,
       y: 20 + Math.random() * canvas.height * 0.28,
@@ -691,56 +691,69 @@ function drawHeart(x, y, size, filled) {
 }
 
 // ─────────────────────────────────────────────
+//  BACKGROUND CACHE  (offscreen canvas — rebuilt only on resize)
+// ─────────────────────────────────────────────
+let _bgCache = null, _bgCacheW = 0, _bgCacheH = 0;
+
+function getBgCache() {
+  const W = canvas.width, H = canvas.height, gY = getGY();
+  if (_bgCache && _bgCacheW === W && _bgCacheH === H) return _bgCache;
+  _bgCacheW = W; _bgCacheH = H;
+  _bgCache = document.createElement('canvas');
+  _bgCache.width = W; _bgCache.height = H;
+  const bc = _bgCache.getContext('2d');
+  // sky gradient
+  const sky = bc.createLinearGradient(0, 0, 0, gY);
+  sky.addColorStop(0, '#1a6fa8'); sky.addColorStop(0.5, '#5ab4e0'); sky.addColorStop(1, '#a8d8f0');
+  bc.fillStyle = sky; bc.fillRect(0, 0, W, gY);
+  // ground gradient
+  const gnd = bc.createLinearGradient(0, gY, 0, H);
+  gnd.addColorStop(0, '#4a8c2a'); gnd.addColorStop(0.08, '#6abf3a');
+  gnd.addColorStop(0.12, '#5c3a1e'); gnd.addColorStop(1, '#3d2410');
+  bc.fillStyle = gnd; bc.fillRect(0, gY, W, H - gY);
+  // grass stripe
+  bc.fillStyle = '#78d63e'; bc.fillRect(0, gY, W, 7);
+  return _bgCache;
+}
+// Invalidate cache on resize
+window.addEventListener('resize', () => { _bgCache = null; });
+
+// ─────────────────────────────────────────────
 //  DRAW BACKGROUND
 // ─────────────────────────────────────────────
 function drawBackground() {
   const gY = getGY();
   const W = canvas.width, H = canvas.height;
 
-  // sky
-  const sky = ctx.createLinearGradient(0, 0, 0, gY);
-  sky.addColorStop(0, '#1a6fa8');
-  sky.addColorStop(0.5, '#5ab4e0');
-  sky.addColorStop(1, '#a8d8f0');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, gY);
+  // Draw cached sky+ground (no gradient creation per frame)
+  ctx.drawImage(getBgCache(), 0, 0);
 
-  // distant mountains
-  ctx.fillStyle = 'rgba(100,160,200,0.35)';
-  const mOff = (scrollX * 0.08) % W;
-  for (let i = -1; i < 3; i++) {
-    const mx = i * (W / 2) - mOff;
-    ctx.beginPath();
-    ctx.moveTo(mx, gY);
-    ctx.lineTo(mx + W * 0.12, gY - 140);
-    ctx.lineTo(mx + W * 0.22, gY - 80);
-    ctx.lineTo(mx + W * 0.30, gY - 160);
-    ctx.lineTo(mx + W * 0.42, gY - 60);
-    ctx.lineTo(mx + W * 0.50, gY);
-    ctx.fill();
+  // Mountains (skip on mobile — not worth the path cost)
+  if (!IS_MOBILE) {
+    ctx.fillStyle = 'rgba(100,160,200,0.35)';
+    const mOff = (scrollX * 0.08) % W;
+    for (let i = -1; i < 3; i++) {
+      const mx = i * (W / 2) - mOff;
+      ctx.beginPath();
+      ctx.moveTo(mx, gY);
+      ctx.lineTo(mx + W * 0.12, gY - 140);
+      ctx.lineTo(mx + W * 0.22, gY - 80);
+      ctx.lineTo(mx + W * 0.30, gY - 160);
+      ctx.lineTo(mx + W * 0.42, gY - 60);
+      ctx.lineTo(mx + W * 0.50, gY);
+      ctx.fill();
+    }
   }
 
-  // clouds
+  // Clouds
   ctx.fillStyle = 'rgba(255,255,255,0.88)';
   clouds.forEach(c => drawCloud(c.x, c.y, c.w, c.layer));
 
-  // ground
-  const ground = ctx.createLinearGradient(0, gY, 0, H);
-  ground.addColorStop(0, '#4a8c2a');
-  ground.addColorStop(0.08, '#6abf3a');
-  ground.addColorStop(0.12, '#5c3a1e');
-  ground.addColorStop(1, '#3d2410');
-  ctx.fillStyle = ground;
-  ctx.fillRect(0, gY, W, H - gY);
-
-  // grass stripe
-  ctx.fillStyle = '#78d63e';
-  ctx.fillRect(0, gY, W, 7);
-
-  // grass tufts (2 layers for parallax)
+  // Grass tufts — fewer on mobile
+  const TUFT_COUNTS = IS_MOBILE ? [10, 14] : [25, 35];
   for (let layer = 0; layer < 2; layer++) {
     const p = layer === 0 ? 0.4 : 1.0;
-    const count = layer === 0 ? 25 : 35;
+    const count = TUFT_COUNTS[layer];
     ctx.fillStyle = layer === 0 ? 'rgba(80,180,40,0.5)' : '#50b828';
     for (let i = 0; i < count; i++) {
       const bx = ((i * 97 + layer * 43 - scrollX * p) % (W + 60) + W + 60) % (W + 60) - 30;
@@ -759,11 +772,18 @@ function drawCloud(x, y, w, layer) {
   const alpha = layer === 1 ? 0.65 : 0.9;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.beginPath();
-  ctx.ellipse(x + w * 0.5, y + h * 0.55, w * 0.5, h * 0.38, 0, 0, Math.PI * 2);
-  ctx.ellipse(x + w * 0.28, y + h * 0.35, w * 0.28, h * 0.42, 0, 0, Math.PI * 2);
-  ctx.ellipse(x + w * 0.72, y + h * 0.3, w * 0.26, h * 0.38, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (IS_MOBILE) {
+    // single ellipse on mobile (3× fewer path ops)
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.5, y + h * 0.45, w * 0.48, h * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.5, y + h * 0.55, w * 0.5, h * 0.38, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.28, y + h * 0.35, w * 0.28, h * 0.42, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + w * 0.72, y + h * 0.3, w * 0.26, h * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -1168,22 +1188,28 @@ function drawObstacle(o) {
       ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
     });
 
-    // spikes
+    // spikes — on mobile skip per-spike save/rotate (9× state change) and draw simple diamonds
     ctx.fillStyle = '#e53935';
     const spikePos = [
       [0.05,0.45],[0.2,0.15],[0.42,0.0],[0.65,0.1],[0.88,0.3],[0.92,0.65],
       [0.75,0.85],[0.15,0.82],[0.5,0.88]
     ];
-    spikePos.forEach(([px, py]) => {
-      const sx = x + w*px, sy = y + h*py;
-      const ang = Math.atan2(py - 0.52, px - 0.5);
-      ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(ang);
-      ctx.beginPath(); ctx.moveTo(-3,0); ctx.lineTo(3,0); ctx.lineTo(0,-11); ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    });
+    if (IS_MOBILE) {
+      spikePos.forEach(([px, py]) => {
+        const sx = x + w*px, sy = y + h*py;
+        ctx.beginPath(); ctx.moveTo(sx,sy-9); ctx.lineTo(sx+3,sy); ctx.lineTo(sx,sy+3); ctx.lineTo(sx-3,sy); ctx.closePath(); ctx.fill();
+      });
+    } else {
+      spikePos.forEach(([px, py]) => {
+        const sx = x + w*px, sy = y + h*py;
+        const ang = Math.atan2(py - 0.52, px - 0.5);
+        ctx.save();
+        ctx.translate(sx, sy); ctx.rotate(ang);
+        ctx.beginPath(); ctx.moveTo(-3,0); ctx.lineTo(3,0); ctx.lineTo(0,-11); ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+    }
   }
 
   ctx.restore();
@@ -1197,27 +1223,33 @@ function drawBullets(now) {
     if (b.dead) return;
     ctx.save();
     if (b.powered) {
-      ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 20;
+      if (SHADOW_ON) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 20; }
       ctx.fillStyle = '#ff2200';
-      // fire trail
-      const trailGrad = ctx.createLinearGradient(b.x - b.r*3, b.y, b.x, b.y);
-      trailGrad.addColorStop(0, 'rgba(255,100,0,0)');
-      trailGrad.addColorStop(1, 'rgba(255,50,0,0.55)');
-      ctx.fillStyle = trailGrad;
-      ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2.5, b.r*0.6, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ff2200';
+      if (!IS_MOBILE) {
+        // fire trail gradient (skip on mobile — gradient create per bullet is costly)
+        const trailGrad = ctx.createLinearGradient(b.x - b.r*3, b.y, b.x, b.y);
+        trailGrad.addColorStop(0, 'rgba(255,100,0,0)');
+        trailGrad.addColorStop(1, 'rgba(255,50,0,0.55)');
+        ctx.fillStyle = trailGrad;
+        ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2.5, b.r*0.6, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ff2200';
+      }
     } else {
-      ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 12;
+      if (SHADOW_ON) { ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 12; }
       ctx.fillStyle = '#ffd700';
-      // normal trail
-      ctx.fillStyle = 'rgba(255,200,0,0.3)';
-      ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2, b.r*0.5, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ffd700';
+      if (!IS_MOBILE) {
+        // normal trail
+        ctx.fillStyle = 'rgba(255,200,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2, b.r*0.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffd700';
+      }
     }
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
-    // core shine
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.beginPath(); ctx.arc(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.35, 0, Math.PI*2); ctx.fill();
+    if (!IS_MOBILE) {
+      // core shine (skip on mobile)
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.arc(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.35, 0, Math.PI*2); ctx.fill();
+    }
     ctx.restore();
   });
 }
@@ -1234,11 +1266,11 @@ function drawParticles() {
       ctx.font = 'bold 18px "Fredoka One", cursive';
       ctx.textAlign = 'center';
       ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+      if (SHADOW_ON) { ctx.shadowColor = p.color; ctx.shadowBlur = 8; }
       ctx.fillText(p.text, p.x, p.y);
     } else {
       ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color; ctx.shadowBlur = 4;
+      if (SHADOW_ON) { ctx.shadowColor = p.color; ctx.shadowBlur = 4; }
       ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.5, p.r * a), 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
