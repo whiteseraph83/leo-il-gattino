@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.1';
+const VERSION = 'v1.0.2';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -790,9 +790,45 @@ function drawCloud(x, y, w, layer) {
 }
 
 // ─────────────────────────────────────────────
-//  DRAW CAT
+//  DRAW CAT — mobile simplified version (~8 ops, no bezier/shadow)
+// ─────────────────────────────────────────────
+function drawCatSimple(now) {
+  const x = CAT_SCREEN_X, y = catY;
+  const powered = now < powerupEnd;
+  const invinc  = now < invincEnd;
+  if (invinc && Math.floor(now / 80) % 2 === 0) return;
+  const c = powered ? '#ff6600' : '#f0922b';
+  ctx.fillStyle = c;
+  // body
+  ctx.fillRect(x + 8, y + 24, 44, 26);
+  // head
+  ctx.beginPath(); ctx.arc(x + 42, y + 22, 19, 0, Math.PI * 2); ctx.fill();
+  // ears
+  ctx.beginPath(); ctx.moveTo(x+25,y+10); ctx.lineTo(x+20,y-1); ctx.lineTo(x+35,y+9); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x+51,y+9);  ctx.lineTo(x+58,y-3); ctx.lineTo(x+62,y+9); ctx.fill();
+  // eyes
+  ctx.fillStyle = 'white';
+  ctx.beginPath(); ctx.arc(x+36, y+19, 5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+50, y+19, 5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = powered ? '#f00' : '#111';
+  ctx.beginPath(); ctx.arc(x+36, y+19, 3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+50, y+19, 3, 0, Math.PI*2); ctx.fill();
+  // tail
+  ctx.strokeStyle = c; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x+14, y+40); ctx.lineTo(x+3, y+14); ctx.stroke();
+  // legs
+  const lf = catOnGround ? Math.sin(catWalkFrame * 1.6) * 6 : 0;
+  ctx.fillStyle = c;
+  ctx.fillRect(x+32, y+48, 9, 13 + lf);
+  ctx.fillRect(x+46, y+48, 9, 13 - lf);
+  ctx.fillRect(x+14, y+46, 9, 12 + lf * 0.5);
+}
+
+// ─────────────────────────────────────────────
+//  DRAW CAT — desktop detailed version
 // ─────────────────────────────────────────────
 function drawCat(now) {
+  if (IS_MOBILE) { drawCatSimple(now); return; }
   const x = CAT_SCREEN_X, y = catY;
   const powered = now < powerupEnd;
   const invinc  = now < invincEnd;
@@ -1041,9 +1077,44 @@ function drawFishPickup(f) {
 }
 
 // ─────────────────────────────────────────────
-//  DRAW DINOSAUR
+//  DRAW DINOSAUR — mobile simplified version
+// ─────────────────────────────────────────────
+function drawDinoSimple(d) {
+  if (d.dead) return;
+  const sc = d.maxHp > 1 ? 1.35 : 1.0;
+  const bw = d.w * sc, bh = d.h * sc;
+  const x = d.x - (bw - d.w) * 0.5, y = d.y;
+  const lg = Math.sin(d.at / 190) * 5;
+  ctx.fillStyle = '#4caf50';
+  // body
+  ctx.fillRect(x + bw*0.12, y + bh*0.28, bw*0.76, bh*0.48);
+  // head
+  ctx.fillRect(x, y + bh*0.08, bw*0.48, bh*0.34);
+  // teeth
+  ctx.fillStyle = 'white';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + i*9 + 3, y + bh*0.4, 6, 8);
+  // eye
+  ctx.fillStyle = '#d50000';
+  ctx.beginPath(); ctx.arc(x + bw*0.16, y + bh*0.17, 4, 0, Math.PI*2); ctx.fill();
+  // legs
+  ctx.fillStyle = '#388e3c';
+  ctx.fillRect(x + bw*0.32, y + bh*0.72, 11, 18 + lg);
+  ctx.fillRect(x + bw*0.52, y + bh*0.72, 11, 18 - lg);
+  // spikes (3 simple rects)
+  ctx.fillStyle = '#2e7d32';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + bw*(0.3+i*0.14), y + bh*0.16, 7, 12);
+  // HP bar
+  if (d.maxHp > 1) {
+    ctx.fillStyle = '#b71c1c'; ctx.fillRect(x, y - 10, bw, 5);
+    ctx.fillStyle = '#76ff03'; ctx.fillRect(x, y - 10, bw * (d.hp / d.maxHp), 5);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  DRAW DINOSAUR — desktop detailed version
 // ─────────────────────────────────────────────
 function drawDino(d) {
+  if (IS_MOBILE) { drawDinoSimple(d); return; }
   if (d.dead) return;
   const sc = d.maxHp > 1 ? 1.35 : 1.0;  // 2HP dinos are 35% bigger
   const x = d.x, y = d.y, w = d.w, h = d.h;
@@ -1445,16 +1516,22 @@ function drawStartScreen() {
 }
 
 // ─────────────────────────────────────────────
-//  GAME LOOP
+//  GAME LOOP  (30fps cap on mobile)
 // ─────────────────────────────────────────────
+const FRAME_MIN_MS = IS_MOBILE ? 1000 / 30 : 0;
+let lastRenderTS = 0;
+
 function loop(ts) {
+  requestAnimationFrame(loop);
+
+  // Throttle to 30fps on mobile — halves ALL rendering work instantly
+  if (IS_MOBILE && ts - lastRenderTS < FRAME_MIN_MS) return;
+  lastRenderTS = ts;
+
   const dt = Math.min(ts - lastTS, 50);
   lastTS = ts;
 
-  if (!checkOrientation()) {
-    requestAnimationFrame(loop);
-    return;
-  }
+  if (!checkOrientation()) return;
 
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
@@ -1528,7 +1605,6 @@ function loop(ts) {
     );
   }
 
-  requestAnimationFrame(loop);
 }
 
 // ─────────────────────────────────────────────
