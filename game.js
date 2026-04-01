@@ -1304,6 +1304,14 @@ function drawHUD(now) {
   const powered = now < powerupEnd;
   const dbl     = now < doubleShootEnd;
 
+  // version tag — top left, below hearts
+  ctx.save();
+  ctx.font = '10px "Nunito", sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.textAlign = 'left';
+  ctx.fillText('v1.0.0', 12, canvas.height - 8);
+  ctx.restore();
+
   // hearts
   for (let i = 0; i < 9; i++) {
     drawHeart(14 + i * 26, 10, 10, i < lives);
