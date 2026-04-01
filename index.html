@@ -141,18 +141,30 @@ function initAudio() {
 const BGM_BPM  = 158;
 const BGM_BEAT = 60 / BGM_BPM;
 
-// Each entry: [freq|null, beats]  — 16 beats total (loops every ~6 s)
+// "Leo's Adventure" — original chiptune composition in C major (16 beats loop ~6s)
 const BGM_MEL = [
-  [N.E5,0.5],[N.E5,0.5],[null,0.5],[N.E5,0.5],[null,0.5],[N.C5,0.5],[N.E5,0.5],[null,0.5],
-  [N.G5,1.0],[null,1.0],[N.G4,1.0],[null,1.0],
-  [N.C5,1.5],[null,0.5],[N.G4,1.0],[null,1.0],
-  [N.E4,1.0],[null,0.5],[N.A4,0.5],[N.B4,0.5],[null,0.5],[N.A4,1.0],
+  // Bar 1 — ascending leap
+  [N.C5,0.5],[N.E5,0.5],[N.G5,0.5],[N.C6,0.5],
+  // Bar 2 — descending answer
+  [N.B4,0.5],[N.G4,0.5],[N.E5,0.5],[N.D5,0.5],
+  // Bar 3 — melodic run up
+  [N.C5,0.5],[N.E5,0.5],[N.G5,0.5],[N.A5,0.5],
+  // Bar 4 — resolution
+  [N.G5,0.5],[N.E5,0.5],[N.C5,1.0],
+  // Bar 5 — F section
+  [N.F5,0.5],[N.A5,0.5],[N.G5,0.5],[N.E5,0.5],
+  // Bar 6 — passing tones
+  [N.D5,0.5],[N.C5,0.5],[N.D5,0.5],[N.E5,0.5],
+  // Bar 7 — bridge
+  [N.C5,0.5],[N.G4,0.5],[N.A4,0.5],[N.B4,0.5],
+  // Bar 8 — finale hold
+  [N.C5,1.5],[null,0.5],
 ];
 const BGM_BASS = [
   [N.C3,1],[N.G3,1],[N.C3,1],[N.G3,1],
-  [N.C3,1],[N.G3,1],[N.F3,1],[N.G3,1],
-  [N.A3,1],[N.E3,1],[N.F3,1],[N.G3,1],
-  [N.A3,1],[N.E3,1],[N.F3,1],[N.G3,1],
+  [N.C3,1],[N.G3,1],[N.A3,1],[N.E3,1],
+  [N.F3,1],[N.C3,1],[N.F3,1],[N.G3,1],
+  [N.C3,1],[N.G3,1],[N.C3,1],[N.C3,1],
 ];
 
 function playNote(freq, t0, dur, wave, bus, vol) {
@@ -321,13 +333,21 @@ function sfxJump() {
 // ─────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────
-let STATE = 'start'; // start | playing | levelup | gameover | win
+let STATE = 'start'; // start | playing | levelup | gameover | win | paused
 let lives, score, level, targetScore;
-let powerupEnd, invincEnd, lastShot;
+let powerupEnd, invincEnd, lastShot, doubleShootEnd, pausedState;
 let scrollX, spawnAcc, nextSpawnGap;
-let bullets, fishItems, dinos, obstacles, particles, clouds;
+let bullets, pickups, dinos, obstacles, particles, clouds;
 let catVY, catY, catOnGround, catWalkT, catWalkFrame;
 let lastTS = 0;
+
+// ── Mobile performance flag ──
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+const MAX_PARTICLES = IS_MOBILE ? 28 : 90;
+const SHADOW_ON = !IS_MOBILE; // disable expensive shadows on mobile
+
+// Pause button area (top-right)
+const PAUSE_BTN = { x: 0, y: 5, w: 46, h: 28 }; // x set dynamically
 
 function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 
@@ -342,21 +362,22 @@ function initGame() {
 }
 
 function initLevel() {
-  bullets    = [];
-  fishItems  = [];
-  dinos      = [];
-  obstacles  = [];
-  particles  = [];
-  clouds     = [];
-  scrollX    = 0;
-  spawnAcc   = 0;
-  nextSpawnGap = 350;
-  lastShot   = 0;
-  powerupEnd = 0;
-  invincEnd  = 0;
-  catVY      = 0;
-  catOnGround = true;
-  catWalkT   = 0;
+  bullets      = [];
+  pickups      = [];
+  dinos        = [];
+  obstacles    = [];
+  particles    = [];
+  clouds       = [];
+  scrollX      = 0;
+  spawnAcc     = 0;
+  nextSpawnGap = 180;
+  lastShot     = 0;
+  powerupEnd   = 0;
+  doubleShootEnd = 0;
+  invincEnd    = 0;
+  catVY        = 0;
+  catOnGround  = true;
+  catWalkT     = 0;
   catWalkFrame = 0;
   catY = getGY() - 54;
 
@@ -375,11 +396,29 @@ function initLevel() {
 // ─────────────────────────────────────────────
 //  INPUT
 // ─────────────────────────────────────────────
+function getEvtCoords(e) {
+  if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
 function handleInput(e) {
   if (e.cancelable) e.preventDefault();
   initAudio();
+  const { x: cx, y: cy } = getEvtCoords(e);
+  const bx = PAUSE_BTN.x;
+
+  // Pause button hit?
+  if ((STATE === 'playing' || STATE === 'paused') &&
+      cx >= bx && cx <= bx + PAUSE_BTN.w &&
+      cy >= PAUSE_BTN.y && cy <= PAUSE_BTN.y + PAUSE_BTN.h) {
+    if (STATE === 'playing') { pausedState = STATE; STATE = 'paused'; }
+    else STATE = pausedState || 'playing';
+    return;
+  }
+
   switch (STATE) {
     case 'start':    initGame(); break;
+    case 'paused':   STATE = pausedState || 'playing'; break;
     case 'levelup':  nextLevel(); break;
     case 'gameover': initGame(); break;
     case 'win':      initGame(); break;
@@ -408,48 +447,50 @@ canvas.addEventListener('touchstart', handleInput, { passive: false });
 // ─────────────────────────────────────────────
 //  SPAWN
 // ─────────────────────────────────────────────
+function spawnPickup(type, x, y) {
+  const heights = [getGY() - 85, getGY() - 145, getGY() - 210];
+  pickups.push({
+    x, y: y ?? heights[Math.floor(Math.random() * heights.length)],
+    w: 36, h: 36,
+    ft: Math.random() * Math.PI * 2,
+    type, // 'fish' | 'paw' | 'heart'
+    done: false
+  });
+}
+
 function spawnEntity(now) {
   const gY = getGY();
   const sx = canvas.width + 80;
-  const r = Math.random();
+  const r  = Math.random();
   const spd = 1.2 + level * 0.4 + Math.random() * 0.6;
 
-  if (r < 0.22) {
-    // fish at various heights
-    const heights = [gY - 85, gY - 145, gY - 210];
-    fishItems.push({
-      x: sx,
-      y: heights[Math.floor(Math.random() * heights.length)],
-      w: 38, h: 30,
-      ft: Math.random() * Math.PI * 2,
-      done: false
-    });
-  } else if (r < 0.48) {
-    // dinosaur
-    const maxHp = level >= 4 ? 2 : 1;
-    const hp = Math.random() < 0.3 && level >= 3 ? 2 : 1;
-    dinos.push({
-      x: sx, y: gY - 70,
-      w: 58, h: 70,
-      spd, hp, maxHp: hp,
-      at: 0, dead: false
-    });
-  } else if (r < 0.68) {
-    // rock
+  // 2HP chance scales with level: L1=0% L2=10% L3=30% L4=55% L5=75%
+  const twoHpChance = [0, 0, 0.10, 0.30, 0.55, 0.75][Math.min(level, 5)];
+  const hp = Math.random() < twoHpChance ? 2 : 1;
+
+  if (r < 0.18) {
+    spawnPickup('fish', sx);
+  } else if (r < 0.25) {
+    spawnPickup('paw', sx);
+  } else if (r < 0.30) {
+    spawnPickup('heart', sx);
+  } else if (r < 0.56) {
+    dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp, maxHp: hp, at: 0, dead: false });
+  } else if (r < 0.72) {
     obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', dead: false });
-  } else if (r < 0.86) {
-    // bush
+  } else if (r < 0.88) {
     obstacles.push({ x: sx, y: gY - 45, w: 55, h: 45, type: 'bush', dead: false });
   } else {
-    // combo: obstacle + fish above
+    // combo: obstacle + pickup above
     const t = Math.random() < 0.5 ? 'rock' : 'bush';
     const oh = t === 'rock' ? 50 : 45;
     obstacles.push({ x: sx, y: gY - oh, w: t === 'rock' ? 50 : 55, h: oh, type: t, dead: false });
-    fishItems.push({ x: sx + 20, y: gY - 180, w: 38, h: 30, ft: 0, done: false });
+    spawnPickup(Math.random() < 0.6 ? 'fish' : 'paw', sx + 20, gY - 185);
   }
 
-  nextSpawnGap = 120 + Math.random() * 280 - level * 10;
-  nextSpawnGap = Math.max(nextSpawnGap, 80);
+  // level 1 is already denser (more enemies), higher levels push spawn gap down
+  nextSpawnGap = 110 + Math.random() * 200 - level * 12;
+  nextSpawnGap = Math.max(nextSpawnGap, 65);
 }
 
 // ─────────────────────────────────────────────
@@ -459,15 +500,14 @@ function tryShoot(now) {
   if (now - lastShot < SHOOT_MS) return;
   lastShot = now;
   const powered = now < powerupEnd;
+  const dbl     = now < doubleShootEnd;
   sfxShoot(powered);
-  bullets.push({
-    x: CAT_SCREEN_X + 58,
-    y: catY + 22,
-    vx: 11,
-    r: powered ? 10 : 6,
-    powered,
-    dead: false
-  });
+  const bR = powered ? 10 : 6;
+  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, dead: false });
+  if (dbl) {
+    // second bullet slightly offset vertically
+    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, dead: false });
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -570,8 +610,8 @@ function update(now, dt) {
     if (c.x + c.w < 0) { c.x = canvas.width + 20; c.y = 20 + Math.random() * canvas.height * 0.27; }
   });
 
-  // move fish
-  fishItems.forEach(f => { if (!f.done) { f.x -= spd; f.ft += 0.055; } });
+  // move pickups
+  pickups.forEach(f => { if (!f.done) { f.x -= spd; f.ft += 0.055; } });
 
   // move dinos
   dinos.forEach(d => {
@@ -589,6 +629,7 @@ function update(now, dt) {
     p.x += p.vx; p.y += p.vy; p.vy += 0.08; p.life -= dt / 1000;
   });
   particles = particles.filter(p => p.life > 0);
+  if (particles.length > MAX_PARTICLES) particles.splice(0, particles.length - MAX_PARTICLES);
 
   // ── COLLISIONS ──────────────────────────────
   const catInvinc = now < invincEnd;
@@ -632,16 +673,26 @@ function update(now, dt) {
     });
   }
 
-  // cat vs fish
-  fishItems.forEach(f => {
+  // cat vs pickups
+  pickups.forEach(f => {
     if (f.done) return;
-    const fy = f.y + Math.sin(f.ft) * 10;
+    const fy = f.y + Math.sin(f.ft) * 8;
     if (rectRect(CAT_SCREEN_X + 4, catY + 4, 48, 46, f.x, fy, f.w, f.h)) {
       f.done = true;
-      powerupEnd = now + POWERUP_MS;
       sfxPowerUp();
-      spawnExplosion(f.x + f.w / 2, f.y + f.h / 2, '#00cfff', 18);
-      spawnText(CAT_SCREEN_X + 26, catY - 20, '🔥 POWER UP!', '#ff6600');
+      if (f.type === 'fish') {
+        powerupEnd = now + POWERUP_MS;
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#00cfff', IS_MOBILE ? 8 : 18);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '🔥 POWER UP!', '#ff6600');
+      } else if (f.type === 'paw') {
+        doubleShootEnd = now + POWERUP_MS;
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff9900', IS_MOBILE ? 8 : 18);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
+      } else if (f.type === 'heart') {
+        lives = Math.min(9, lives + 1);
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff2244', IS_MOBILE ? 8 : 14);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '❤️ VITA!', '#ff2244');
+      }
     }
   });
 
@@ -664,8 +715,7 @@ function update(now, dt) {
   }
 
   // cleanup
-  fishItems  = fishItems.filter(f => !f.done || false).filter(f => f.x > -80);
-  fishItems  = fishItems.filter(f => f.x > -80);
+  pickups = pickups.filter(f => !f.done && f.x > -80);
   dinos      = dinos.filter(d => d.x > -150);
   obstacles  = obstacles.filter(o => !o.dead && o.x > -100);
   bullets    = bullets.filter(b => !b.dead);
@@ -796,7 +846,7 @@ function drawCat(now) {
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
 
   ctx.save();
-  if (powered) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 18; }
+  if (powered && SHADOW_ON) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 18; }
 
   // TAIL
   ctx.save();
@@ -917,17 +967,73 @@ function drawCat(now) {
 }
 
 // ─────────────────────────────────────────────
-//  DRAW FISH
+//  DRAW PICKUPS  (fish / paw / heart)
 // ─────────────────────────────────────────────
-function drawFish(f) {
+function drawPickup(f) {
+  if (f.done) return;
+  if (f.type === 'paw')   { drawPawPickup(f);   return; }
+  if (f.type === 'heart') { drawHeartPickup(f); return; }
+  drawFishPickup(f);
+}
+
+function drawPawPickup(f) {
+  const floatY = Math.sin(f.ft) * 8;
+  const cx = f.x + f.w/2, cy = f.y + f.h/2 + floatY;
+  ctx.save();
+  if (SHADOW_ON) { ctx.shadowColor = '#ff9900'; ctx.shadowBlur = 14; }
+  // glow ring
+  ctx.strokeStyle = 'rgba(255,160,0,0.4)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, f.w*0.58, 0, Math.PI*2); ctx.stroke();
+  // palm pad
+  ctx.fillStyle = '#ff9900';
+  ctx.beginPath(); ctx.arc(cx, cy + 3, f.w*0.28, 0, Math.PI*2); ctx.fill();
+  // 4 toe pads
+  const toePositions = [[-9,-10],[0,-13],[9,-10],[14,-2]];
+  ctx.fillStyle = '#ffb84d';
+  toePositions.forEach(([tx, ty]) => {
+    ctx.beginPath(); ctx.arc(cx+tx, cy+ty, 5, 0, Math.PI*2); ctx.fill();
+  });
+  // center shine
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath(); ctx.arc(cx - 3, cy + 1, 4, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHeartPickup(f) {
+  const floatY = Math.sin(f.ft) * 8;
+  const cx = f.x + f.w/2, cy = f.y + f.h/2 + floatY;
+  const pulse = 1 + 0.1 * Math.sin(f.ft * 3);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(pulse, pulse);
+  if (SHADOW_ON) { ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 16; }
+  // glow ring
+  ctx.strokeStyle = 'rgba(255,50,80,0.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0, 0, f.w*0.55, 0, Math.PI*2); ctx.stroke();
+  // heart shape
+  const s = 11;
+  ctx.fillStyle = '#ff2244';
+  ctx.beginPath();
+  ctx.moveTo(0, s*0.3);
+  ctx.bezierCurveTo(0,-s*0.1, -s*0.6,-s*0.1, -s*0.6, s*0.3);
+  ctx.bezierCurveTo(-s*0.6, s*0.65, 0, s*0.9, 0, s*1.1);
+  ctx.bezierCurveTo(0, s*0.9, s*0.6, s*0.65, s*0.6, s*0.3);
+  ctx.bezierCurveTo(s*0.6,-s*0.1, 0,-s*0.1, 0, s*0.3);
+  ctx.closePath(); ctx.fill();
+  // shine
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.ellipse(-3, 2, 3, 5, -0.5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawFishPickup(f) {
   if (f.done) return;
   const floatY = Math.sin(f.ft) * 10;
   const x = f.x, y = f.y + floatY;
   const w = f.w, h = f.h;
 
   ctx.save();
-  ctx.shadowColor = '#00cfff';
-  ctx.shadowBlur = 14;
+  if (SHADOW_ON) { ctx.shadowColor = '#00cfff'; ctx.shadowBlur = 14; }
 
   // tail
   ctx.fillStyle = '#29b6f6';
@@ -986,10 +1092,15 @@ function drawFish(f) {
 // ─────────────────────────────────────────────
 function drawDino(d) {
   if (d.dead) return;
+  const sc = d.maxHp > 1 ? 1.35 : 1.0;  // 2HP dinos are 35% bigger
   const x = d.x, y = d.y, w = d.w, h = d.h;
   const bob = Math.sin(d.at / 190) * 3;
 
   ctx.save();
+  if (sc !== 1.0) {
+    const cx = x + w / 2, cy = y + h / 2;
+    ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy);
+  }
 
   // tail
   ctx.strokeStyle = '#43a047';
@@ -1206,9 +1317,29 @@ function drawParticles() {
 // ─────────────────────────────────────────────
 //  DRAW HUD
 // ─────────────────────────────────────────────
+function drawPauseBtn(now) {
+  const W = canvas.width;
+  PAUSE_BTN.x = W - PAUSE_BTN.w - 8;
+  const bx = PAUSE_BTN.x, by = PAUSE_BTN.y, bw = PAUSE_BTN.w, bh = PAUSE_BTN.h;
+  const isPaused = STATE === 'paused';
+  ctx.save();
+  // bg pill
+  ctx.fillStyle = isPaused ? 'rgba(255,215,0,0.85)' : 'rgba(0,0,0,0.45)';
+  drawRoundRect(bx, by, bw, bh, 8); ctx.fill();
+  // icon
+  ctx.fillStyle = isPaused ? '#000' : '#fff';
+  ctx.font = 'bold 15px "Nunito", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isPaused ? '▶' : '⏸', bx + bw/2, by + bh/2 + 1);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
 function drawHUD(now) {
   const W = canvas.width;
   const powered = now < powerupEnd;
+  const dbl     = now < doubleShootEnd;
 
   // hearts
   for (let i = 0; i < 9; i++) {
@@ -1223,33 +1354,36 @@ function drawHUD(now) {
   ctx.strokeText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
   ctx.fillStyle = '#fff'; ctx.fillText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
 
-  // level
+  // level (leave room for pause btn on right)
   ctx.textAlign = 'right';
   const lvlTxt = `Livello ${level}`;
-  ctx.strokeText(lvlTxt, W - 12, 32);
-  ctx.fillStyle = '#ffd700'; ctx.fillText(lvlTxt, W - 12, 32);
+  ctx.strokeText(lvlTxt, W - 68, 32);
+  ctx.fillStyle = '#ffd700'; ctx.fillText(lvlTxt, W - 68, 32);
   ctx.restore();
 
-  // power-up bar
-  if (powered) {
-    const rem = (powerupEnd - now) / POWERUP_MS;
+  drawPauseBtn(now);
+
+  // power-up bars
+  let barY = 50;
+  function drawBar(rem, col1, col2, label) {
     ctx.save();
-    // bg
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    drawRoundRect(10, 50, 160, 16, 8); ctx.fill();
-    // bar
-    const barGrad = ctx.createLinearGradient(10, 0, 170, 0);
-    barGrad.addColorStop(0, '#ff4500'); barGrad.addColorStop(1, '#ffd700');
-    ctx.fillStyle = barGrad;
-    ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 8;
-    drawRoundRect(10, 50, Math.max(4, 160 * rem), 16, 8); ctx.fill();
-    // label
+    drawRoundRect(10, barY, 165, 16, 8); ctx.fill();
+    const grad = ctx.createLinearGradient(10, 0, 175, 0);
+    grad.addColorStop(0, col1); grad.addColorStop(1, col2);
+    ctx.fillStyle = grad;
+    if (SHADOW_ON) { ctx.shadowColor = col1; ctx.shadowBlur = 8; }
+    drawRoundRect(10, barY, Math.max(4, 165 * rem), 16, 8); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.font = 'bold 11px "Nunito", sans-serif';
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-    ctx.fillText('🔥 POWER UP!', 14, 62);
+    ctx.fillText(label, 14, barY + 12);
     ctx.restore();
+    barY += 22;
   }
+
+  if (powered) drawBar((powerupEnd - now) / POWERUP_MS, '#ff4500', '#ffd700', '🔥 POWER UP!');
+  if (dbl)     drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
 }
 
 // ─────────────────────────────────────────────
@@ -1349,20 +1483,34 @@ function loop(ts) {
   if (STATE === 'start') {
     drawStartScreen();
 
-  } else if (STATE === 'playing') {
-    update(ts, dt);
+  } else if (STATE === 'playing' || STATE === 'paused') {
+    if (STATE === 'playing') update(ts, dt);
     drawBackground();
-    fishItems.forEach(drawFish);
+    pickups.forEach(drawPickup);
     obstacles.forEach(drawObstacle);
     dinos.forEach(drawDino);
     drawBullets(ts);
     drawCat(ts);
     drawParticles();
     drawHUD(ts);
+    if (STATE === 'paused') {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.font = 'bold 56px "Fredoka One", cursive';
+      ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700';
+      ctx.shadowColor = '#ff8c00'; ctx.shadowBlur = 20;
+      ctx.fillText('⏸ PAUSA', W/2, H/2 - 10);
+      ctx.shadowBlur = 0;
+      ctx.font = '22px "Nunito", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText('Clicca ovunque per continuare', W/2, H/2 + 38);
+      ctx.restore();
+    }
 
   } else if (STATE === 'levelup') {
     drawBackground();
-    fishItems.forEach(drawFish);
+    pickups.forEach(drawPickup);
     obstacles.forEach(drawObstacle);
     dinos.forEach(drawDino);
     drawCat(ts);
