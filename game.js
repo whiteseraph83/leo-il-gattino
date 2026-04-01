@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.3';
+const VERSION = 'v1.0.4';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -61,6 +61,7 @@ const N = {
 };
 
 function initAudio() {
+  if (IS_MOBILE) return; // audio disabled on mobile (perf test)
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   AC = new (window.AudioContext || window.webkitAudioContext)();
   const master = AC.createGain(); master.gain.value = 0.80; master.connect(AC.destination);
