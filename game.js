@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.4';
+const VERSION = 'v1.0.5';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -11,13 +11,15 @@ function isMobileDevice() {
          (navigator.maxTouchPoints > 1 && window.screen.width < 1024);
 }
 
+// Cache orientation result — only touch DOM on actual change (avoids reflow every frame)
+let _orientationOk = true;
 function checkOrientation() {
-  if (isMobileDevice() && window.innerHeight > window.innerWidth) {
-    portraitWall.classList.add('show');
-    return false;
+  const ok = !(isMobileDevice() && window.innerHeight > window.innerWidth);
+  if (ok !== _orientationOk) {
+    _orientationOk = ok;
+    portraitWall.classList.toggle('show', !ok);
   }
-  portraitWall.classList.remove('show');
-  return true;
+  return ok;
 }
 
 window.addEventListener('resize', () => { checkOrientation(); resizeCanvas(); });
@@ -1627,11 +1629,11 @@ function drawSceneMobile(now) {
     ctx.fillStyle = '#ff9900'; ctx.fillRect(10, by, 140*(doubleShootEnd-now)/POWERUP_MS, 10);
   }
 
-  // version
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
-  ctx.font = 'bold 12px sans-serif';
+  // version + FPS + update time (diagnostic)
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 14px sans-serif';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(VERSION, 10, H - 8);
+  ctx.fillText(`${VERSION}  |  FPS: ${_fpsDisplay}  |  upd: ${_updateMs}ms`, 10, H - 8);
   ctx.textBaseline = 'alphabetic';
 }
 
@@ -1640,6 +1642,9 @@ function drawSceneMobile(now) {
 // ─────────────────────────────────────────────
 const FRAME_MIN_MS = IS_MOBILE ? 1000 / 30 : 0;
 let lastRenderTS = 0;
+
+// FPS + update-time profiler (visible on mobile)
+let _fpsCount = 0, _fpsTimer = 0, _fpsDisplay = 0, _updateMs = 0;
 
 function loop(ts) {
   requestAnimationFrame(loop);
@@ -1651,6 +1656,11 @@ function loop(ts) {
   const dt = Math.min(ts - lastTS, 50);
   lastTS = ts;
 
+  // FPS counter
+  _fpsCount++;
+  _fpsTimer += dt;
+  if (_fpsTimer >= 1000) { _fpsDisplay = _fpsCount; _fpsCount = 0; _fpsTimer -= 1000; }
+
   if (!checkOrientation()) return;
 
   const W = canvas.width, H = canvas.height;
@@ -1660,7 +1670,11 @@ function loop(ts) {
     drawStartScreen();
 
   } else if (STATE === 'playing' || STATE === 'paused') {
-    if (STATE === 'playing') update(ts, dt);
+    if (STATE === 'playing') {
+      const _t0 = performance.now();
+      update(ts, dt);
+      _updateMs = Math.round((performance.now() - _t0) * 10) / 10;
+    }
     if (IS_MOBILE) {
       drawSceneMobile(ts);
     } else {
