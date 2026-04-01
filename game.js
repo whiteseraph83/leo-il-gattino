@@ -1,3 +1,5 @@
+const VERSION = 'v1.0.1';
+
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
 // ─────────────────────────────────────────────
@@ -1312,9 +1314,9 @@ function drawHUD(now) {
   // dark outline for contrast against the ground
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
   ctx.lineWidth = 3;
-  ctx.strokeText('v1.0.0', 10, canvas.height - 10);
+  ctx.strokeText(VERSION, 10, canvas.height - 10);
   ctx.fillStyle = 'rgba(255,255,255,0.90)';
-  ctx.fillText('v1.0.0', 10, canvas.height - 10);
+  ctx.fillText(VERSION, 10, canvas.height - 10);
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
 
