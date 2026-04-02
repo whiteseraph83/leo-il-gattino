@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.7';
+const VERSION = 'v1.0.8';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -1508,15 +1508,16 @@ function drawParticles() {
 //  DRAW HUD
 // ─────────────────────────────────────────────
 function drawFpsMeter() {
+  const label = `${VERSION}  |  FPS: ${_fpsDisplay}`;
   ctx.save();
   ctx.font = 'bold 13px "Nunito", sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
   ctx.lineWidth = 3;
-  ctx.strokeText(`FPS: ${_fpsDisplay}`, 10, canvas.height - 10);
+  ctx.strokeText(label, 10, canvas.height - 10);
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fillText(`FPS: ${_fpsDisplay}`, 10, canvas.height - 10);
+  ctx.fillText(label, 10, canvas.height - 10);
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
 }
@@ -1545,20 +1546,7 @@ function drawHUD(now) {
   const powered = now < powerupEnd;
   const dbl     = now < doubleShootEnd;
 
-  // version tag — bottom-left, over the ground
-  ctx.save();
-  ctx.font = 'bold 13px "Nunito", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'bottom';
-  // dark outline for contrast against the ground
-  ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-  ctx.lineWidth = 3;
-  ctx.strokeText(VERSION, 10, canvas.height - 10);
-  ctx.fillStyle = 'rgba(255,255,255,0.90)';
-  ctx.fillText(VERSION, 10, canvas.height - 10);
-  ctx.textBaseline = 'alphabetic';
-  ctx.restore();
-  drawFpsMeter();
+  drawFpsMeter(); // versione + FPS in basso a sinistra
 
   // hearts
   for (let i = 0; i < 9; i++) {
