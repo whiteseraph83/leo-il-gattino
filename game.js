@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.5';
+const VERSION = 'v1.0.6';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -53,7 +53,7 @@ const SHOOT_MS_FAST  = 130;  // fish power-up interval (5× faster)
 const POWERUP_MS     = 10000;
 const CAT_SCREEN_X   = 140;
 const GROUND_RATIO   = 0.76;
-const LEVEL_TARGETS  = [0, 10, 20, 30, 40, 50]; // index = level
+const LEVEL_TARGETS  = [0, 10, 22, 36, 52, 70, 90, 115, 142, 172, 205]; // index = level (1–10)
 
 // ─────────────────────────────────────────────
 //  AUDIO ENGINE  (Web Audio API — no external files)
@@ -259,6 +259,20 @@ function sfxLevelUp() {
   });
 }
 
+function sfxCoin() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  // bright "ding ding" — three quick sine tones
+  [N.E5, N.G5, N.C6].forEach((f, i) => {
+    const t0 = t + i * 0.055;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.30, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.22);
+    o.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 0.22);
+  });
+}
+
 function sfxJump() {
   if (!AC) return;
   const t = AC.currentTime;
@@ -275,8 +289,9 @@ function sfxJump() {
 //  STATE
 // ─────────────────────────────────────────────
 let STATE = 'start'; // start | playing | levelup | gameover | win | paused
-let lives, score, level, targetScore;
+let lives, score, coins, level, targetScore;
 let powerupEnd, invincEnd, lastShot, doubleShootEnd, pausedState;
+let _restartBtnRect = null; // set when drawing gameover/win, checked in handleInput
 let scrollX, spawnAcc, nextSpawnGap;
 let bullets, pickups, dinos, obstacles, particles, clouds;
 let catVY, catY, catOnGround, catWalkT, catWalkFrame;
@@ -296,7 +311,7 @@ function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 //  INIT
 // ─────────────────────────────────────────────
 function initGame() {
-  lives = 9; score = 0; level = 1;
+  lives = 9; score = 0; coins = 0; level = 1;
   targetScore = LEVEL_TARGETS[1];
   initLevel();
   STATE = 'playing';
@@ -366,11 +381,19 @@ function handleInput(e) {
   }
 
   switch (STATE) {
-    case 'start':    initGame(); break;
-    case 'paused':   STATE = pausedState || 'playing'; break;
-    case 'levelup':  nextLevel(); break;
-    case 'gameover': initGame(); break;
-    case 'win':      initGame(); break;
+    case 'start':   initGame(); break;
+    case 'paused':  STATE = pausedState || 'playing'; break;
+    case 'levelup': nextLevel(); break;
+    case 'gameover':
+    case 'win':
+      // restart only if the green GIOCA ANCORA button is clicked
+      if (_restartBtnRect &&
+          cx >= _restartBtnRect.x && cx <= _restartBtnRect.x + _restartBtnRect.w &&
+          cy >= _restartBtnRect.y && cy <= _restartBtnRect.y + _restartBtnRect.h) {
+        _restartBtnRect = null;
+        initGame();
+      }
+      break;
     case 'playing':
       if (catOnGround) {
         catVY = JUMP_FORCE;
@@ -384,7 +407,7 @@ function handleInput(e) {
 
 function nextLevel() {
   level++;
-  targetScore = LEVEL_TARGETS[Math.min(level, 5)];
+  targetScore = LEVEL_TARGETS[Math.min(level, 10)];
   sfxLevelUp();
   initLevel();
   STATE = 'playing';
@@ -413,28 +436,31 @@ function spawnEntity(now) {
   const r  = Math.random();
   const spd = 1.2 + level * 0.4 + Math.random() * 0.6;
 
-  // 2HP chance scales with level: L1=0% L2=10% L3=30% L4=55% L5=75%
-  const twoHpChance = [0, 0, 0.10, 0.30, 0.55, 0.75][Math.min(level, 5)];
+  // 2HP chance scales with level L1=0% → L10=90%
+  const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const hp = Math.random() < twoHpChance ? 2 : 1;
 
-  if (r < 0.18) {
+  // Powerup spawn rates reduced (total ~18%): fish 7%, paw 4%, heart 3%, coin 4%
+  if (r < 0.07) {
     spawnPickup('fish', sx);
-  } else if (r < 0.25) {
+  } else if (r < 0.11) {
     spawnPickup('paw', sx);
-  } else if (r < 0.30) {
+  } else if (r < 0.14) {
     spawnPickup('heart', sx);
-  } else if (r < 0.56) {
+  } else if (r < 0.18) {
+    spawnPickup('coin', sx);
+  } else if (r < 0.46) {
     dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp, maxHp: hp, at: 0, dead: false });
-  } else if (r < 0.72) {
+  } else if (r < 0.63) {
     obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', dead: false });
-  } else if (r < 0.88) {
+  } else if (r < 0.80) {
     obstacles.push({ x: sx, y: gY - 45, w: 55, h: 45, type: 'bush', dead: false });
   } else {
-    // combo: obstacle + pickup above
+    // combo: obstacle + pickup above (coin or fish)
     const t = Math.random() < 0.5 ? 'rock' : 'bush';
     const oh = t === 'rock' ? 50 : 45;
     obstacles.push({ x: sx, y: gY - oh, w: t === 'rock' ? 50 : 55, h: oh, type: t, dead: false });
-    spawnPickup(Math.random() < 0.6 ? 'fish' : 'paw', sx + 20, gY - 185);
+    spawnPickup(['fish', 'coin', 'coin'][Math.floor(Math.random() * 3)], sx + 20, gY - 185);
   }
 
   // level 1 is already denser (more enemies), higher levels push spawn gap down
@@ -520,9 +546,11 @@ function spawnText(x, y, text, color) {
 function hitCat(now) {
   if (now < invincEnd) return;
   lives--;
+  coins = Math.max(0, coins - 2); // prendere un colpo costa 2 monete
   invincEnd = now + 2000;
   sfxHitCat();
   spawnExplosion(CAT_SCREEN_X + 26, catY + 27, '#ff3333', 10);
+  spawnText(CAT_SCREEN_X + 26, catY - 30, '🪙 -2', '#ff8888');
   if (lives <= 0) { STATE = 'gameover'; }
 }
 
@@ -661,19 +689,26 @@ function update(now, dt) {
     const fy = f.y + Math.sin(f.ft) * 8;
     if (rectRect(CAT_SCREEN_X + 4, catY + 4, 48, 46, f.x, fy, f.w, f.h)) {
       f.done = true;
-      sfxPowerUp();
       if (f.type === 'fish') {
+        sfxPowerUp();
         powerupEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#00cfff', IS_MOBILE ? 8 : 18);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '🔥 POWER UP!', '#ff6600');
       } else if (f.type === 'paw') {
+        sfxPowerUp();
         doubleShootEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff9900', IS_MOBILE ? 8 : 18);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
       } else if (f.type === 'heart') {
+        sfxPowerUp();
         lives = Math.min(9, lives + 1);
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff2244', IS_MOBILE ? 8 : 14);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '❤️ VITA!', '#ff2244');
+      } else if (f.type === 'coin') {
+        sfxCoin();
+        coins++;
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffd700', IS_MOBILE ? 6 : 14);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '🪙 +1', '#ffd700');
       }
     }
   }
@@ -710,7 +745,7 @@ function update(now, dt) {
 
   // win condition
   if (score >= targetScore) {
-    if (level >= 5) STATE = 'win';
+    if (level >= 10) STATE = 'win';
     else STATE = 'levelup';
   }
 }
@@ -1017,6 +1052,7 @@ function drawPickup(f) {
   if (f.done) return;
   if (f.type === 'paw')   { drawPawPickup(f);   return; }
   if (f.type === 'heart') { drawHeartPickup(f); return; }
+  if (f.type === 'coin')  { drawCoinPickup(f);  return; }
   drawFishPickup(f);
 }
 
@@ -1067,6 +1103,49 @@ function drawHeartPickup(f) {
   // shine
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.beginPath(); ctx.ellipse(-3, 2, 3, 5, -0.5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawCoinPickup(f) {
+  if (f.done) return;
+  const floatY = Math.sin(f.ft) * 8;
+  const cx = f.x + f.w / 2, cy = f.y + f.h / 2 + floatY;
+  const spin = Math.max(0.1, Math.abs(Math.cos(f.ft * 1.9))); // 3D rotation effect
+  const r = f.w * 0.42;
+
+  ctx.save();
+  if (SHADOW_ON) { ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 16; }
+
+  // glow ring
+  ctx.strokeStyle = 'rgba(255,220,0,0.4)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.stroke();
+
+  // coin body (ellipse X scaled for spin perspective)
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath(); ctx.ellipse(cx, cy, r * spin, r, 0, 0, Math.PI * 2); ctx.fill();
+
+  // inner ring
+  ctx.fillStyle = '#ffb300';
+  ctx.beginPath(); ctx.ellipse(cx, cy, r * 0.64 * spin, r * 0.64, 0, 0, Math.PI * 2); ctx.fill();
+
+  // '€' symbol — visible when coin faces the camera
+  if (spin > 0.28) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(spin, 1);
+    ctx.fillStyle = '#e65100';
+    ctx.font = `bold ${Math.floor(r * 0.88)}px "Fredoka One", cursive`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('€', 0, 1);
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // shine
+  ctx.fillStyle = 'rgba(255,255,255,0.48)';
+  ctx.beginPath(); ctx.ellipse(cx - r * 0.18 * spin, cy - r * 0.26, r * 0.22 * spin, r * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+
   ctx.restore();
 }
 
@@ -1474,6 +1553,12 @@ function drawHUD(now) {
   ctx.strokeText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
   ctx.fillStyle = '#fff'; ctx.fillText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
 
+  // coin counter below score
+  ctx.font = 'bold 17px "Fredoka One", cursive';
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3;
+  ctx.strokeText(`🪙 ${coins}`, W / 2, 52);
+  ctx.fillStyle = '#ffd700'; ctx.fillText(`🪙 ${coins}`, W / 2, 52);
+
   // level (leave room for pause btn on right)
   ctx.textAlign = 'right';
   const lvlTxt = `Livello ${level}`;
@@ -1483,8 +1568,8 @@ function drawHUD(now) {
 
   drawPauseBtn(now);
 
-  // power-up bars
-  let barY = 50;
+  // power-up bars (start below coin counter y≈52)
+  let barY = 68;
   function drawBar(rem, col1, col2, label) {
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1509,7 +1594,9 @@ function drawHUD(now) {
 // ─────────────────────────────────────────────
 //  DRAW OVERLAY SCREENS
 // ─────────────────────────────────────────────
-function drawOverlay(title, lines, hint, overlay) {
+// drawOverlay — if btnLabel is provided, shows a clickable restart button
+// and stores its rect in _restartBtnRect. Otherwise shows pulsing hint text.
+function drawOverlay(title, lines, hint, overlay, btnLabel) {
   const W = canvas.width, H = canvas.height;
 
   // Dim
@@ -1517,7 +1604,7 @@ function drawOverlay(title, lines, hint, overlay) {
   ctx.fillRect(0, 0, W, H);
 
   // Panel
-  const pw = Math.min(520, W - 40), ph = 260;
+  const pw = Math.min(520, W - 40), ph = 310;
   const px = (W - pw) / 2, py = (H - ph) / 2;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 30;
@@ -1545,17 +1632,39 @@ function drawOverlay(title, lines, hint, overlay) {
   ctx.save();
   ctx.font = '20px "Nunito", sans-serif';
   ctx.textAlign = 'center'; ctx.fillStyle = '#ddd'; ctx.shadowBlur = 0;
-  lines.forEach((l, i) => ctx.fillText(l, W/2, py + 108 + i*28));
+  lines.forEach((l, i) => ctx.fillText(l, W/2, py + 112 + i*30));
   ctx.restore();
 
-  // Hint (pulsing)
-  const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 400);
-  ctx.save();
-  ctx.font = 'bold 16px "Nunito", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-  ctx.fillText(hint, W/2, py + ph - 22);
-  ctx.restore();
+  if (btnLabel) {
+    // Clickable restart button (green pill)
+    const bw = 230, bh = 50;
+    const bx = W / 2 - bw / 2, by = py + ph - 72;
+    ctx.save();
+    ctx.fillStyle = '#1db954';
+    drawRoundRect(bx, by, bw, bh, 25); ctx.fill();
+    ctx.strokeStyle = '#5dfc8c'; ctx.lineWidth = 2.5;
+    drawRoundRect(bx, by, bw, bh, 25); ctx.stroke();
+    // button shine overlay
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    drawRoundRect(bx + 6, by + 6, bw - 12, bh / 2 - 4, 20); ctx.fill();
+    ctx.font = 'bold 22px "Fredoka One", cursive';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(btnLabel, W / 2, by + bh / 2);
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+    _restartBtnRect = { x: bx, y: by, w: bw, h: bh };
+  } else {
+    _restartBtnRect = null;
+    // Pulsing hint text
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 400);
+    ctx.save();
+    ctx.font = 'bold 16px "Nunito", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255,255,255,${pulse})`;
+    ctx.fillText(hint, W/2, py + ph - 22);
+    ctx.restore();
+  }
 }
 
 function drawStartScreen() {
@@ -1637,15 +1746,19 @@ function drawSceneMobile(now) {
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  drawRoundRect(W / 2 - 88, 8, 176, 28, 14);
+  drawRoundRect(W / 2 - 100, 6, 200, 44, 14);
   ctx.fill();
   ctx.font = 'bold 20px "Fredoka One", cursive';
   ctx.textAlign = 'center';
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
   ctx.lineWidth = 3;
-  ctx.strokeText(`${score} / ${targetScore}`, W / 2, 29);
+  ctx.strokeText(`${score} / ${targetScore}`, W / 2, 26);
   ctx.fillStyle = '#fff6d5';
-  ctx.fillText(`${score} / ${targetScore}`, W / 2, 29);
+  ctx.fillText(`${score} / ${targetScore}`, W / 2, 26);
+  ctx.font = 'bold 15px "Fredoka One", cursive';
+  ctx.strokeText(`🪙 ${coins}`, W / 2, 43);
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`🪙 ${coins}`, W / 2, 43);
   ctx.restore();
 
   ctx.save();
@@ -1780,7 +1893,7 @@ function loop(ts) {
     drawHUD(ts);
     drawOverlay(
       `⭐ Livello ${level} Superato! ⭐`,
-      [`Ottimo lavoro! Punti: ${score}`,`Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,5)]} punti`],
+      [`Ottimo lavoro! Punti: ${score}  🪙 ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,10)]} punti`],
       '✨ Clicca per continuare ✨'
     );
 
@@ -1788,27 +1901,30 @@ function loop(ts) {
     drawBackground();
     drawOverlay(
       '💀 Game Over 💀',
-      [`Hai totalizzato ${score} punti`, `al Livello ${level}`],
-      '🔄 Clicca per riprovare',
-      'rgba(60,0,0,0.7)'
+      [`Hai totalizzato ${score} punti`, `al Livello ${level}`, `🪙 Monete raccolte: ${coins}`],
+      null,
+      'rgba(60,0,0,0.7)',
+      '🔄 GIOCA ANCORA'
     );
 
   } else if (STATE === 'win') {
     const W2 = canvas.width, H2 = canvas.height;
-    const bg = ctx.createRadialGradient(W2/2,H2/2,0,W2/2,H2/2,Math.max(W2,H2));
-    bg.addColorStop(0,'#1a3a1a'); bg.addColorStop(1,'#0a0a0a');
-    ctx.fillStyle=bg; ctx.fillRect(0,0,W2,H2);
+    const bg2 = ctx.createRadialGradient(W2/2,H2/2,0,W2/2,H2/2,Math.max(W2,H2));
+    bg2.addColorStop(0,'#1a3a1a'); bg2.addColorStop(1,'#0a0a0a');
+    ctx.fillStyle=bg2; ctx.fillRect(0,0,W2,H2);
     // confetti
     for (let i=0;i<80;i++) {
-      const cx = ((i*173 + ts*0.05) % W2+W2)%W2;
-      const cy = ((i*89 + ts*0.03) % H2+H2)%H2;
+      const cfX = ((i*173 + ts*0.05) % W2+W2)%W2;
+      const cfY = ((i*89 + ts*0.03) % H2+H2)%H2;
       ctx.fillStyle = `hsl(${(i*47+ts*0.1)%360},80%,60%)`;
-      ctx.fillRect(cx, cy, 6, 4);
+      ctx.fillRect(cfX, cfY, 6, 4);
     }
     drawOverlay(
       '🏆 HAI VINTO! 🏆',
-      ['Leo ha sconfitto tutti i dinosauri!',`Punteggio finale: ${score} punti`,'Sei un campione! 🎉'],
-      '🔄 Clicca per ricominciare'
+      ['Leo ha sconfitto tutti i dinosauri!', `Punti: ${score}  🪙 Monete: ${coins}`, 'Sei un campione! 🎉'],
+      null,
+      null,
+      '🔄 GIOCA ANCORA'
     );
   }
 
