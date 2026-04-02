@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.6';
+const VERSION = 'v1.0.7';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -546,11 +546,9 @@ function spawnText(x, y, text, color) {
 function hitCat(now) {
   if (now < invincEnd) return;
   lives--;
-  coins = Math.max(0, coins - 2); // prendere un colpo costa 2 monete
   invincEnd = now + 2000;
   sfxHitCat();
   spawnExplosion(CAT_SCREEN_X + 26, catY + 27, '#ff3333', 10);
-  spawnText(CAT_SCREEN_X + 26, catY - 30, '🪙 -2', '#ff8888');
   if (lives <= 0) { STATE = 'gameover'; }
 }
 
@@ -708,7 +706,7 @@ function update(now, dt) {
         sfxCoin();
         coins++;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffd700', IS_MOBILE ? 6 : 14);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '🪙 +1', '#ffd700');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '+1 moneta', '#ffd700');
       }
     }
   }
@@ -779,6 +777,28 @@ function drawHeart(x, y, size, filled) {
   ctx.bezierCurveTo(x + size * 0.6, y, x, y, x, y + size * 0.3);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+// Small golden coin disc used in HUD — drawn via canvas (no emoji, always gold)
+function drawCoinBadge(x, y, r) {
+  ctx.save();
+  // outer gold disc
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  // inner darker ring
+  ctx.fillStyle = '#e6a800';
+  ctx.beginPath(); ctx.arc(x, y, r * 0.68, 0, Math.PI * 2); ctx.fill();
+  // € symbol
+  ctx.fillStyle = '#7a4800';
+  ctx.font = `bold ${Math.floor(r * 1.1)}px "Fredoka One", cursive`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('€', x, y + 1);
+  ctx.textBaseline = 'alphabetic';
+  // top-left shine
+  ctx.fillStyle = 'rgba(255,255,255,0.50)';
+  ctx.beginPath(); ctx.arc(x - r * 0.28, y - r * 0.28, r * 0.28, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
@@ -1553,11 +1573,14 @@ function drawHUD(now) {
   ctx.strokeText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
   ctx.fillStyle = '#fff'; ctx.fillText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
 
-  // coin counter below score
+  // coin counter below score — badge + number
+  drawCoinBadge(W / 2 - 28, 44, 9);
   ctx.font = 'bold 17px "Fredoka One", cursive';
+  ctx.textAlign = 'left';
   ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3;
-  ctx.strokeText(`🪙 ${coins}`, W / 2, 52);
-  ctx.fillStyle = '#ffd700'; ctx.fillText(`🪙 ${coins}`, W / 2, 52);
+  ctx.strokeText(`${coins}`, W / 2 - 15, 52);
+  ctx.fillStyle = '#ffd700'; ctx.fillText(`${coins}`, W / 2 - 15, 52);
+  ctx.textAlign = 'center';
 
   // level (leave room for pause btn on right)
   ctx.textAlign = 'right';
@@ -1755,10 +1778,16 @@ function drawSceneMobile(now) {
   ctx.strokeText(`${score} / ${targetScore}`, W / 2, 26);
   ctx.fillStyle = '#fff6d5';
   ctx.fillText(`${score} / ${targetScore}`, W / 2, 26);
+  ctx.restore();
+  // coin badge + number (drawn outside the save/restore block to keep textAlign clean)
+  drawCoinBadge(W / 2 - 22, 36, 8);
+  ctx.save();
   ctx.font = 'bold 15px "Fredoka One", cursive';
-  ctx.strokeText(`🪙 ${coins}`, W / 2, 43);
+  ctx.textAlign = 'left';
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3;
+  ctx.strokeText(`${coins}`, W / 2 - 11, 43);
   ctx.fillStyle = '#ffd700';
-  ctx.fillText(`🪙 ${coins}`, W / 2, 43);
+  ctx.fillText(`${coins}`, W / 2 - 11, 43);
   ctx.restore();
 
   ctx.save();
@@ -1893,7 +1922,7 @@ function loop(ts) {
     drawHUD(ts);
     drawOverlay(
       `⭐ Livello ${level} Superato! ⭐`,
-      [`Ottimo lavoro! Punti: ${score}  🪙 ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,10)]} punti`],
+      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,10)]} punti`],
       '✨ Clicca per continuare ✨'
     );
 
@@ -1901,7 +1930,7 @@ function loop(ts) {
     drawBackground();
     drawOverlay(
       '💀 Game Over 💀',
-      [`Hai totalizzato ${score} punti`, `al Livello ${level}`, `🪙 Monete raccolte: ${coins}`],
+      [`Hai totalizzato ${score} punti`, `al Livello ${level}`, `Monete raccolte: ${coins}`],
       null,
       'rgba(60,0,0,0.7)',
       '🔄 GIOCA ANCORA'
@@ -1921,7 +1950,7 @@ function loop(ts) {
     }
     drawOverlay(
       '🏆 HAI VINTO! 🏆',
-      ['Leo ha sconfitto tutti i dinosauri!', `Punti: ${score}  🪙 Monete: ${coins}`, 'Sei un campione! 🎉'],
+      ['Leo ha sconfitto tutti i dinosauri!', `Punti: ${score}  |  Monete: ${coins}`, 'Sei un campione! 🎉'],
       null,
       null,
       '🔄 GIOCA ANCORA'
