@@ -64,16 +64,24 @@ const LEVEL_TARGETS  = [
 // ─────────────────────────────────────────────
 //  UPGRADE SHOP
 // ─────────────────────────────────────────────
-const UPGRADE_COST = 5;
+const UPGRADE_COST = 5;          // base cost — scales +2 per livello già acquistato
+const UPGRADE_PIERCE_COST = 20;  // costo fisso per Perforazione
 const UPGRADE_INFO = {
-  fish:      { label: 'Più Pesciolini',  desc: 'Pesciolino (sparo rapido) appare più spesso',    col: '#00cfff' },
-  heart:     { label: 'Più Cuori',       desc: 'Cuore (vita extra) appare più spesso',            col: '#ff2244' },
-  enemy:     { label: 'Più Nemici',      desc: 'Più dinosauri in campo — più punti da guadagnare!', col: '#4caf50' },
-  paw:       { label: 'Più Zampette',    desc: 'Zampetta (doppio sparo) appare più spesso',       col: '#ff9900' },
-  lightning: { label: 'Più Fulmini',     desc: 'Fulmine (frenesia nemici) appare più spesso',     col: '#ffe000' },
-  laser:     { label: 'Più Laser',       desc: 'Laser (spari penetranti) appare più spesso',      col: '#00ffcc' },
+  fish:      { label: 'Più Pesciolini',  desc: 'Pesciolino (sparo rapido) appare più spesso',         col: '#00cfff' },
+  heart:     { label: 'Più Cuori',       desc: 'Cuore (vita extra) appare più spesso',                 col: '#ff2244' },
+  enemy:     { label: 'Più Nemici',      desc: 'Più dinosauri in campo — più punti da guadagnare!',    col: '#4caf50' },
+  paw:       { label: 'Più Zampette',    desc: 'Zampetta (doppio sparo) appare più spesso',            col: '#ff9900' },
+  lightning: { label: 'Più Fulmini',     desc: 'Fulmine (frenesia nemici) appare più spesso',          col: '#ffe000' },
+  laser:     { label: 'Più Laser',       desc: 'Laser (spari penetranti) appare più spesso',           col: '#00ffcc' },
+  pierce:    { label: 'Perforazione +1', desc: 'I proiettili trapassano 1 nemico/ostacolo in più. Si cumula!', col: '#e040fb' },
 };
-const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser'];
+const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser','pierce'];
+
+// Costo di un upgrade — pierce è fisso 20, gli altri scalano +2 per ogni livello già acquistato
+function upgradeCost(key) {
+  if (key === 'pierce') return UPGRADE_PIERCE_COST;
+  return UPGRADE_COST + (upgrades ? (upgrades[key] || 0) * 2 : 0);
+}
 
 // ─────────────────────────────────────────────
 //  AUDIO ENGINE  (Web Audio API — no external files)
@@ -380,7 +388,7 @@ function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 function initGame() {
   lives = 9; score = 0; coins = 0; level = 1;
   targetScore = LEVEL_TARGETS[1];
-  upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0 };
+  upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0, pierce: 0 };
   shopOffers = []; shopOfferBought = []; shopBtnRects = []; shopContinueBtnRect = null;
   initLevel();
   STATE = 'playing';
@@ -459,9 +467,11 @@ function handleInput(e) {
       // Buy button hit?
       for (const btn of (shopBtnRects || [])) {
         if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
-          if (coins >= UPGRADE_COST && !shopOfferBought[btn.idx]) {
-            coins -= UPGRADE_COST;
-            upgrades[shopOffers[btn.idx]]++;
+          const _key  = shopOffers[btn.idx];
+          const _cost = upgradeCost(_key);
+          if (coins >= _cost && !shopOfferBought[btn.idx]) {
+            coins -= _cost;
+            upgrades[_key]++;
             shopOfferBought[btn.idx] = true;
             sfxPowerUp();
           }
@@ -531,7 +541,7 @@ function buildSpawnTable() {
     { type: 'paw',       w: 0.040 * (1 + u.paw       * 0.60) },
     { type: 'heart',     w: 0.030 * (1 + u.heart     * 0.60) },
     { type: 'coin',      w: 0.150 },
-    { type: 'laser',     w: 0.030 * (1 + u.laser     * 0.60) },
+    { type: 'laser',     w: 0.015 * (1 + u.laser     * 0.60) },
     { type: 'dino',      w: 0.300 * (1 + u.enemy     * 0.30) },
     { type: 'rock',      w: 0.120 },
     { type: 'bush',      w: 0.170 },
@@ -620,9 +630,10 @@ function tryShoot(now) {
   const dbl     = now < doubleShootEnd;
   sfxShoot(powered);
   const bR = laser ? 9 : powered ? 10 : 6;
-  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, laser, dead: false });
+  const pl = upgrades ? (upgrades.pierce || 0) : 0; // pierce-left counter
+  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, laser, pierceLeft: pl, dead: false });
   if (dbl) {
-    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, laser, dead: false });
+    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, laser, pierceLeft: pl, dead: false });
   }
 }
 
@@ -686,7 +697,7 @@ function spawnText(x, y, text, color) {
 function hitCat(now) {
   if (now < invincEnd) return;
   lives--;
-  invincEnd = now + 2000;
+  invincEnd = now + 1000;
   sfxHitCat();
   spawnExplosion(CAT_SCREEN_X + 26, catY + 27, '#ff3333', 10);
   if (lives <= 0) { STATE = 'gameover'; }
@@ -783,8 +794,12 @@ function update(now, dt) {
       const d = dinos[di];
       if (d.dead) continue;
       if (circRect(b.x, b.y, b.r, d.x, d.y, d.w, d.h)) {
-        if (!b.laser) b.dead = true; // laser bullet penetrates dinos
-        spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : '#ff9900', 8);
+        // laser: penetra sempre; pierce: decrementa fino a 0; altrimenti muore
+        if (!b.laser) {
+          if (b.pierceLeft > 0) { b.pierceLeft--; }
+          else { b.dead = true; }
+        }
+        spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : b.pierceLeft >= 0 ? '#e040fb' : '#ff9900', 8);
         d.hp--;
         if (d.hp <= 0) {
           d.dead = true;
@@ -795,7 +810,7 @@ function update(now, dt) {
         } else {
           sfxHitEnemy(false);
         }
-        if (!b.laser) break; // non-laser bullet is dead, skip rest
+        if (b.dead) break;
       }
     }
   }
@@ -822,10 +837,10 @@ function update(now, dt) {
           spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : oc, IS_MOBILE ? 3 : 6);
         }
         if (!b.laser) {
-          b.dead = true;
-          break; // normal / powered bullet stops at first obstacle
+          if (b.pierceLeft > 0) { b.pierceLeft--; }
+          else { b.dead = true; break; }
         }
-        // laser bullet penetrates: continue to next obstacle
+        // laser / pierce: continue to next obstacle
       }
     }
   }
@@ -2267,7 +2282,8 @@ function drawShopScreen(now) {
     const info = UPGRADE_INFO[key];
     const cx = px + margin + idx * (cardW + margin);
     const bought = shopOfferBought && shopOfferBought[idx];
-    const canAfford = coins >= UPGRADE_COST;
+    const cost = upgradeCost(key);
+    const canAfford = coins >= cost;
 
     // Card bg
     ctx.save();
@@ -2337,7 +2353,7 @@ function drawShopScreen(now) {
       ctx.font = 'bold 13px "Fredoka One", cursive';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = canAfford ? '#fff' : '#666';
-      ctx.fillText(`Acquista (${UPGRADE_COST} 💰)`, btnX + btnW / 2, btnY + btnH / 2);
+      ctx.fillText(`Acquista (${cost} 💰)`, btnX + btnW / 2, btnY + btnH / 2);
       ctx.textBaseline = 'alphabetic';
       ctx.restore();
       if (canAfford) shopBtnRects.push({ idx, x: btnX, y: btnY, w: btnW, h: btnH });
