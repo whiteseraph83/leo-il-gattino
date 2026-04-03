@@ -60,6 +60,11 @@ const LEVEL_TARGETS  = [
   243,287,337,394,459,533,617,712,820,942,     // L11-L20
   1080,1236,1412,1612,1837,2091,2377,2700,3064,3475 // L21-L30
 ];
+// Livelli infiniti: oltre il 30 si usa una formula geometrica (~14% per livello)
+function getLevelTarget(lv) {
+  if (lv <= 30) return LEVEL_TARGETS[Math.max(0, Math.min(lv, 30))];
+  return Math.round(LEVEL_TARGETS[30] * Math.pow(1.14, lv - 30));
+}
 
 // ─────────────────────────────────────────────
 //  CAT COLOR PALETTES  (colori realistici)
@@ -403,7 +408,7 @@ function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 // ─────────────────────────────────────────────
 function initGame() {
   lives = 9; score = 0; coins = 0; level = 1;
-  targetScore = LEVEL_TARGETS[1];
+  targetScore = getLevelTarget(1);
   upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0, pierce: 0, maxheart: 0 };
   catPalette = CAT_PALETTES[Math.floor(Math.random() * CAT_PALETTES.length)];
   shopOffers = []; shopOfferBought = []; shopBtnRects = []; shopContinueBtnRect = null;
@@ -529,7 +534,7 @@ function handleInput(e) {
 
 function nextLevel() {
   level++;
-  targetScore = LEVEL_TARGETS[Math.min(level, 30)];
+  targetScore = getLevelTarget(level);
   sfxLevelUp();
   initLevel();
   STATE = 'playing';
@@ -975,10 +980,9 @@ function update(now, dt) {
   compactArrayInPlace(obstacles, o => !o.dead && o.x > -100);
   compactArrayInPlace(bullets, b => !b.dead);
 
-  // win condition
+  // livelli infiniti — ad ogni superamento si apre il negozio
   if (score >= targetScore) {
-    if (level >= 30) STATE = 'win';
-    else { generateShopOffers(); STATE = 'shop'; }
+    generateShopOffers(); STATE = 'shop';
   }
 }
 
@@ -2562,7 +2566,7 @@ function loop(ts) {
     drawHUD(ts);
     drawOverlay(
       `⭐ Livello ${level} Superato! ⭐`,
-      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,30)]} punti`],
+      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${getLevelTarget(level+1)} punti`],
       '✨ Clicca per continuare ✨'
     );
 
