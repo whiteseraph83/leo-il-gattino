@@ -1863,13 +1863,14 @@ function drawSpawnStats() {
   const gY     = getGY();
   const H      = canvas.height;
   const groundH = H - gY;
-  const rows   = 5;
+  const cols   = 3;
+  const rows   = Math.ceil(table.length / cols); // 4 rows × 3 cols = 12 slots for 10 items
   const rowH   = Math.max(10, (groundH - 10) / rows);
   const fSize  = Math.max(9, Math.min(11, rowH - 2));
   const dotR   = Math.max(3, fSize * 0.40);
-  const colW   = 98;
+  const colW   = 88;
   const sx     = 6, sy = gY + (groundH - rowH * rows) / 2;
-  const boxW   = colW * 2, boxH = rowH * rows + 4;
+  const boxW   = colW * cols, boxH = rowH * rows + 4;
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
@@ -1880,8 +1881,8 @@ function drawSpawnStats() {
   ctx.textAlign = 'left';
 
   table.forEach(({ type, w }, i) => {
-    const col  = Math.floor(i / rows);
-    const row  = i % rows;
+    const col  = Math.floor(i / rows); // column index (0,1,2)
+    const row  = i % rows;             // row within that column
     const x    = sx + col * colW;
     const y    = sy + 2 + row * rowH + rowH / 2;
     const pct  = (w / total * 100).toFixed(1);
