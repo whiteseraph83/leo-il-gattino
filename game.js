@@ -1869,8 +1869,8 @@ function drawSpawnStats() {
   const rowH   = 15; // fixed compact height — independent of ground area
   const dotR   = 3.5;
   const colW   = 80;
-  const sx     = 6, sy = gY + 4;
   const boxW   = colW * cols, boxH = rowH * rows + 6;
+  const sx     = 6, sy = canvas.height - boxH - 4;
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
