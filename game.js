@@ -522,6 +522,22 @@ canvas.addEventListener('touchstart', handleInput, { passive: false });
 // ─────────────────────────────────────────────
 //  SPAWN
 // ─────────────────────────────────────────────
+// Shared weighted table — used by both spawnEntity and drawSpawnStats
+function buildSpawnTable() {
+  const u = upgrades || { fish:0, heart:0, enemy:0, paw:0, lightning:0, laser:0 };
+  return [
+    { type: 'lightning', w: 0.020 * (1 + u.lightning * 0.60) },
+    { type: 'fish',      w: 0.040 * (1 + u.fish      * 0.60) },
+    { type: 'paw',       w: 0.040 * (1 + u.paw       * 0.60) },
+    { type: 'heart',     w: 0.030 * (1 + u.heart     * 0.60) },
+    { type: 'coin',      w: 0.150 },
+    { type: 'laser',     w: 0.030 * (1 + u.laser     * 0.60) },
+    { type: 'dino',      w: 0.300 * (1 + u.enemy     * 0.30) },
+    { type: 'rock',      w: 0.120 },
+    { type: 'bush',      w: 0.170 },
+    { type: 'combo',     w: 0.100 },
+  ];
+}
 function spawnPickup(type, x, y) {
   const heights = [getGY() - 85, getGY() - 145, getGY() - 210];
   pickups.push({
@@ -551,20 +567,8 @@ function spawnEntity(now) {
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Build weighted spawn table — upgrades multiply powerup base rates
-  const u = upgrades || { fish:0, heart:0, enemy:0, paw:0, lightning:0, laser:0 };
-  const table = [
-    { type: 'lightning', w: 0.020 * (1 + u.lightning * 0.60) },
-    { type: 'fish',      w: 0.040 * (1 + u.fish      * 0.60) },
-    { type: 'paw',       w: 0.040 * (1 + u.paw       * 0.60) },
-    { type: 'heart',     w: 0.030 * (1 + u.heart     * 0.60) },
-    { type: 'coin',      w: 0.150 },
-    { type: 'laser',     w: 0.030 * (1 + u.laser     * 0.60) },
-    { type: 'dino',      w: 0.300 * (1 + u.enemy     * 0.30) },
-    { type: 'rock',      w: 0.120 },
-    { type: 'bush',      w: 0.170 },
-    { type: 'combo',     w: 0.100 },
-  ];
+  // Build weighted spawn table
+  const table = buildSpawnTable();
   const total = table.reduce((s, e) => s + e.w, 0);
   let r = Math.random() * total;
   let chosen = 'combo';
@@ -1826,13 +1830,79 @@ function drawFpsMeter() {
   const label = `${VERSION}  |  FPS: ${_fpsDisplay}`;
   ctx.save();
   ctx.font = 'bold 13px "Nunito", sans-serif';
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
   ctx.lineWidth = 3;
-  ctx.strokeText(label, 10, canvas.height - 10);
+  ctx.strokeText(label, canvas.width - 10, canvas.height - 10);
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fillText(label, 10, canvas.height - 10);
+  ctx.fillText(label, canvas.width - 10, canvas.height - 10);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// Spawn probability legend — bottom-left, in the ground strip
+function drawSpawnStats() {
+  if (!upgrades) return;
+  const table = buildSpawnTable();
+  const total = table.reduce((s, e) => s + e.w, 0);
+
+  const meta = {
+    lightning: { label: 'Fulmine',  dot: '#ffe000' },
+    fish:      { label: 'Pesciol.', dot: '#00cfff' },
+    paw:       { label: 'Zampet.', dot: '#ff9900' },
+    heart:     { label: 'Cuore',    dot: '#ff2244' },
+    coin:      { label: 'Moneta',   dot: '#ffd700' },
+    laser:     { label: 'Laser',    dot: '#00ffcc' },
+    dino:      { label: 'Dino',     dot: '#4caf50' },
+    rock:      { label: 'Roccia',   dot: '#bdbdbd' },
+    bush:      { label: 'Cespug.',  dot: '#66bb6a' },
+    combo:     { label: 'Combo',    dot: '#ff8a65' },
+  };
+
+  const gY     = getGY();
+  const H      = canvas.height;
+  const groundH = H - gY;
+  const rows   = 5;
+  const rowH   = Math.max(10, (groundH - 10) / rows);
+  const fSize  = Math.max(9, Math.min(11, rowH - 2));
+  const dotR   = Math.max(3, fSize * 0.40);
+  const colW   = 98;
+  const sx     = 6, sy = gY + (groundH - rowH * rows) / 2;
+  const boxW   = colW * 2, boxH = rowH * rows + 4;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  drawRoundRect(sx - 3, sy - 2, boxW + 6, boxH + 2, 6); ctx.fill();
+
+  ctx.font = `bold ${fSize}px "Nunito", sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+
+  table.forEach(({ type, w }, i) => {
+    const col  = Math.floor(i / rows);
+    const row  = i % rows;
+    const x    = sx + col * colW;
+    const y    = sy + 2 + row * rowH + rowH / 2;
+    const pct  = (w / total * 100).toFixed(1);
+    const m    = meta[type];
+    const boosted = upgrades[type] != null && upgrades[type] > 0;
+    const alpha   = boosted ? 1.0 : 0.62;
+
+    // coloured dot
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = m.dot;
+    ctx.beginPath(); ctx.arc(x + dotR + 2, y, dotR, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // label + pct
+    const tx = x + dotR * 2 + 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.62)'; ctx.lineWidth = 2.5;
+    ctx.strokeText(`${m.label} ${pct}%`, tx, y);
+    ctx.fillStyle = boosted ? m.dot : 'rgba(255,255,255,0.82)';
+    ctx.fillText(`${m.label} ${pct}%`, tx, y);
+  });
+
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
 }
@@ -1894,6 +1964,7 @@ function drawHUD(now) {
   ctx.fillStyle = '#ffd700'; ctx.fillText(lvlTxt, W - 68, 32);
   ctx.restore();
 
+  drawSpawnStats();
   drawPauseBtn(now);
 
   // power-up bars (start below coin counter y≈52)
@@ -2109,6 +2180,7 @@ function drawSceneMobile(now) {
   ctx.fillText(`Lv ${level}`, W - 68, 29);
   ctx.restore();
 
+  drawSpawnStats();
   drawPauseBtn(now);
 
   let by = 38;
@@ -2287,6 +2359,7 @@ function drawShopScreen(now) {
   ctx.restore();
   shopContinueBtnRect = { x: cbX, y: cbY, w: cbW, h: cbH };
 
+  drawSpawnStats();
   drawFpsMeter();
 }
 
