@@ -1143,9 +1143,9 @@ function drawCatSimple(now) {
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
 
   const _pal    = catPalette || CAT_PALETTES[0];
-  const bodyCol = powered ? '#ff6600' : _pal.body;
-  const headCol = powered ? '#ff7a1a' : _pal.head;
-  const darkCol = powered ? '#cc4400' : _pal.dark;
+  const bodyCol = powered ? '#8833ff' : _pal.body;
+  const headCol = powered ? '#9944ff' : _pal.head;
+  const darkCol = powered ? '#6622cc' : _pal.dark;
   const pupilCol = powered ? '#ff0000' : '#1a1a1a';
   const legAnim = catOnGround ? Math.sin(catWalkFrame * 1.6) : 0;
   const legF = legAnim * 7, legB = legAnim * 6;
@@ -1236,12 +1236,12 @@ function drawCat(now) {
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
 
   const _pal2  = catPalette || CAT_PALETTES[0];
-  const _body  = powered ? '#ff6600' : _pal2.body;
-  const _head  = powered ? '#ff7a1a' : _pal2.head;
-  const _dark  = powered ? '#cc4400' : _pal2.dark;
+  const _body  = powered ? '#8833ff' : _pal2.body;
+  const _head  = powered ? '#9944ff' : _pal2.head;
+  const _dark  = powered ? '#6622cc' : _pal2.dark;
 
   ctx.save();
-  if (powered && SHADOW_ON) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 18; }
+  if (powered && SHADOW_ON) { ctx.shadowColor = '#8833ff'; ctx.shadowBlur = 18; }
 
   // TAIL
   ctx.save();
@@ -1940,8 +1940,10 @@ function drawFpsMeter() {
 // Spawn probability legend — bottom-left, in the ground strip
 function drawSpawnStats() {
   if (!upgrades) return;
-  const table = buildSpawnTable();
-  const total = table.reduce((s, e) => s + e.w, 0);
+  const fullTable = buildSpawnTable();
+  // Esclude 'combo' dalla legenda (non ha un'icona riconoscibile)
+  const table = fullTable.filter(e => e.type !== 'combo');
+  const total = fullTable.reduce((s, e) => s + e.w, 0); // totale sul pieno per % corrette
 
   const meta = {
     lightning: { label: 'Fulmine',  dot: '#ffe000' },
@@ -1959,8 +1961,8 @@ function drawSpawnStats() {
   const gY     = getGY();
   const H      = canvas.height;
   const groundH = H - gY;
-  const cols   = 4;
-  const rows   = Math.ceil(table.length / cols); // 3 rows × 4 cols
+  const cols   = 3;
+  const rows   = Math.ceil(table.length / cols); // 3 rows × 3 cols = 9 items esatti
   const fSize  = 10;
   const rowH   = 15; // fixed compact height — independent of ground area
   const dotR   = 3.5;
@@ -2084,7 +2086,7 @@ function drawHUD(now) {
     barY += 22;
   }
 
-  if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#ff4500', '#ffd700', '🔥 POWER UP!');
+  if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', '🔥 POWER UP!');
   if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
   if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', '⚡ FRENESIA!');
   if (laser)     drawBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', '🔫 LASER!');
@@ -2302,7 +2304,7 @@ function drawSceneMobile(now) {
     by += 18;
   }
 
-  if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#ff7a18', '#ffd84a', 'POWER UP');
+  if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', 'POWER UP');
   if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
   if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', 'FRENESIA');
   if (laser)     drawFlatBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', 'LASER');
