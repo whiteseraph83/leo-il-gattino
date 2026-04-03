@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.13';
+const VERSION = 'v1.0.14';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -60,6 +60,20 @@ const LEVEL_TARGETS  = [
   243,287,337,394,459,533,617,712,820,942,     // L11-L20
   1080,1236,1412,1612,1837,2091,2377,2700,3064,3475 // L21-L30
 ];
+
+// ─────────────────────────────────────────────
+//  UPGRADE SHOP
+// ─────────────────────────────────────────────
+const UPGRADE_COST = 5;
+const UPGRADE_INFO = {
+  fish:      { label: 'Più Pesciolini',  desc: 'Pesciolino (sparo rapido) appare più spesso',    col: '#00cfff' },
+  heart:     { label: 'Più Cuori',       desc: 'Cuore (vita extra) appare più spesso',            col: '#ff2244' },
+  enemy:     { label: 'Più Nemici',      desc: 'Più dinosauri in campo — più punti da guadagnare!', col: '#4caf50' },
+  paw:       { label: 'Più Zampette',    desc: 'Zampetta (doppio sparo) appare più spesso',       col: '#ff9900' },
+  lightning: { label: 'Più Fulmini',     desc: 'Fulmine (frenesia nemici) appare più spesso',     col: '#ffe000' },
+  laser:     { label: 'Più Laser',       desc: 'Laser (spari penetranti) appare più spesso',      col: '#00ffcc' },
+};
+const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser'];
 
 // ─────────────────────────────────────────────
 //  AUDIO ENGINE  (Web Audio API — no external files)
@@ -265,6 +279,27 @@ function sfxLevelUp() {
   });
 }
 
+function sfxLaser() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(800, t);
+  o.frequency.exponentialRampToValueAtTime(2400, t + 0.10);
+  o.frequency.setValueAtTime(1800, t + 0.10);
+  o.frequency.exponentialRampToValueAtTime(2200, t + 0.38);
+  g.gain.setValueAtTime(0.38, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+  o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 0.42);
+  const o2 = AC.createOscillator(), g2 = AC.createGain();
+  o2.type = 'square';
+  o2.frequency.setValueAtTime(1600, t);
+  o2.frequency.exponentialRampToValueAtTime(4400, t + 0.14);
+  g2.gain.setValueAtTime(0.13, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  o2.connect(g2); g2.connect(sfxBus); o2.start(t); o2.stop(t + 0.18);
+}
+
 function sfxLightning() {
   if (!AC) return;
   const t = AC.currentTime;
@@ -318,9 +353,11 @@ function sfxJump() {
 // ─────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────
-let STATE = 'start'; // start | playing | levelup | gameover | win | paused
+let STATE = 'start'; // start | playing | shop | levelup | gameover | win | paused
 let lives, score, coins, level, targetScore;
-let powerupEnd, invincEnd, lastShot, doubleShootEnd, lightningEnd, pausedState;
+let powerupEnd, invincEnd, lastShot, doubleShootEnd, lightningEnd, laserEnd, pausedState;
+let upgrades; // { fish, heart, enemy, paw, lightning, laser } — persists across levels within run
+let shopOffers, shopOfferBought, shopBtnRects, shopContinueBtnRect;
 let _restartBtnRect = null; // set when drawing gameover/win, checked in handleInput
 let scrollX, spawnAcc, nextSpawnGap;
 let bullets, pickups, dinos, obstacles, particles, clouds;
@@ -343,6 +380,8 @@ function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 function initGame() {
   lives = 9; score = 0; coins = 0; level = 1;
   targetScore = LEVEL_TARGETS[1];
+  upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0 };
+  shopOffers = []; shopOfferBought = []; shopBtnRects = []; shopContinueBtnRect = null;
   initLevel();
   STATE = 'playing';
 }
@@ -361,6 +400,7 @@ function initLevel() {
   powerupEnd     = 0;
   doubleShootEnd = 0;
   lightningEnd   = 0;
+  laserEnd       = 0;
   invincEnd      = 0;
   catVY        = 0;
   catOnGround  = true;
@@ -415,6 +455,26 @@ function handleInput(e) {
     case 'start':   initGame(); break;
     case 'paused':  STATE = pausedState || 'playing'; break;
     case 'levelup': nextLevel(); break;
+    case 'shop':
+      // Buy button hit?
+      for (const btn of (shopBtnRects || [])) {
+        if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+          if (coins >= UPGRADE_COST && !shopOfferBought[btn.idx]) {
+            coins -= UPGRADE_COST;
+            upgrades[shopOffers[btn.idx]]++;
+            shopOfferBought[btn.idx] = true;
+            sfxPowerUp();
+          }
+          return;
+        }
+      }
+      // Continue button hit?
+      if (shopContinueBtnRect &&
+          cx >= shopContinueBtnRect.x && cx <= shopContinueBtnRect.x + shopContinueBtnRect.w &&
+          cy >= shopContinueBtnRect.y && cy <= shopContinueBtnRect.y + shopContinueBtnRect.h) {
+        nextLevel();
+      }
+      break;
     case 'gameover':
     case 'win':
       // restart only if the green GIOCA ANCORA button is clicked
@@ -442,6 +502,18 @@ function nextLevel() {
   sfxLevelUp();
   initLevel();
   STATE = 'playing';
+}
+
+function generateShopOffers() {
+  const keys = [...UPGRADE_KEYS];
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  shopOffers = keys.slice(0, 2);
+  shopOfferBought = [false, false];
+  shopBtnRects = [];
+  shopContinueBtnRect = null;
 }
 
 canvas.addEventListener('click', handleInput);
@@ -472,7 +544,6 @@ function getObstacleHp() {
 function spawnEntity(now) {
   const gY = getGY();
   const sx = canvas.width + 80;
-  const r  = Math.random();
   // Speed capped at 9 to stay playable at high levels
   const spd = Math.min(9, 1.2 + level * 0.28 + Math.random() * 0.7);
 
@@ -480,27 +551,47 @@ function spawnEntity(now) {
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Powerup spawn rates: lightning 2%, fish 4%, paw 4%, heart 3%, coin 15%
-  if (r < 0.02) {
+  // Build weighted spawn table — upgrades multiply powerup base rates
+  const u = upgrades || { fish:0, heart:0, enemy:0, paw:0, lightning:0, laser:0 };
+  const table = [
+    { type: 'lightning', w: 0.020 * (1 + u.lightning * 0.60) },
+    { type: 'fish',      w: 0.040 * (1 + u.fish      * 0.60) },
+    { type: 'paw',       w: 0.040 * (1 + u.paw       * 0.60) },
+    { type: 'heart',     w: 0.030 * (1 + u.heart     * 0.60) },
+    { type: 'coin',      w: 0.150 },
+    { type: 'laser',     w: 0.030 * (1 + u.laser     * 0.60) },
+    { type: 'dino',      w: 0.300 * (1 + u.enemy     * 0.30) },
+    { type: 'rock',      w: 0.120 },
+    { type: 'bush',      w: 0.170 },
+    { type: 'combo',     w: 0.100 },
+  ];
+  const total = table.reduce((s, e) => s + e.w, 0);
+  let r = Math.random() * total;
+  let chosen = 'combo';
+  for (const entry of table) { r -= entry.w; if (r <= 0) { chosen = entry.type; break; } }
+
+  if (chosen === 'lightning') {
     spawnPickup('lightning', sx);
-  } else if (r < 0.06) {
+  } else if (chosen === 'fish') {
     spawnPickup('fish', sx);
-  } else if (r < 0.10) {
+  } else if (chosen === 'paw') {
     spawnPickup('paw', sx);
-  } else if (r < 0.13) {
+  } else if (chosen === 'heart') {
     spawnPickup('heart', sx);
-  } else if (r < 0.28) {
+  } else if (chosen === 'coin') {
     spawnPickup('coin', sx);
-  } else if (r < 0.58) {
+  } else if (chosen === 'laser') {
+    spawnPickup('laser', sx);
+  } else if (chosen === 'dino') {
     dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp: dinoHp, maxHp: dinoHp, at: 0, dead: false });
-  } else if (r < 0.70) {
+  } else if (chosen === 'rock') {
     const ohp = getObstacleHp();
     obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', hp: ohp, maxHp: ohp, dead: false });
-  } else if (r < 0.80) {
+  } else if (chosen === 'bush') {
     const ohp = getObstacleHp();
     obstacles.push({ x: sx, y: gY - 45, w: 55, h: 45, type: 'bush', hp: ohp, maxHp: ohp, dead: false });
   } else {
-    // combo: obstacle + pickup above (coin or fish)
+    // combo: obstacle + coin above
     const t = Math.random() < 0.5 ? 'rock' : 'bush';
     const oh = t === 'rock' ? 50 : 45;
     const ohp = getObstacleHp();
@@ -508,7 +599,7 @@ function spawnEntity(now) {
     spawnPickup('coin', sx + 20, gY - 185);
   }
 
-  // Spawn gap: più denso di base, fulmine lo riduce ulteriormente
+  // Spawn gap: fulmine lo riduce ulteriormente
   const baseGap = Math.max(45, 100 - level * 3 + Math.random() * 70);
   nextSpawnGap = (now < lightningEnd) ? Math.max(18, baseGap * 0.32) : baseGap;
 }
@@ -521,13 +612,13 @@ function tryShoot(now) {
   if (now - lastShot < interval) return;
   lastShot = now;
   const powered = now < powerupEnd;
+  const laser   = now < laserEnd;
   const dbl     = now < doubleShootEnd;
   sfxShoot(powered);
-  const bR = powered ? 10 : 6;
-  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, dead: false });
+  const bR = laser ? 9 : powered ? 10 : 6;
+  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, laser, dead: false });
   if (dbl) {
-    // second bullet slightly offset vertically
-    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, dead: false });
+    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, laser, dead: false });
   }
 }
 
@@ -688,8 +779,8 @@ function update(now, dt) {
       const d = dinos[di];
       if (d.dead) continue;
       if (circRect(b.x, b.y, b.r, d.x, d.y, d.w, d.h)) {
-        b.dead = true;
-        spawnExplosion(b.x, b.y, '#ff9900', 8);
+        if (!b.laser) b.dead = true; // laser bullet penetrates dinos
+        spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : '#ff9900', 8);
         d.hp--;
         if (d.hp <= 0) {
           d.dead = true;
@@ -700,14 +791,14 @@ function update(now, dt) {
         } else {
           sfxHitEnemy(false);
         }
-        break;
+        if (!b.laser) break; // non-laser bullet is dead, skip rest
       }
     }
   }
 
   // bullets vs obstacles:
-  //   • sparo normale  → si distrugge sull'ostacolo, toglie 1 HP
-  //   • sparo potenziato → penetra (non si distrugge), toglie 1 HP
+  //   • normale / potenziato (fish) → si distrugge sull'ostacolo, toglie 1 HP
+  //   • laser → penetra, toglie 1 HP e continua
   for (let bi = 0; bi < bullets.length; bi++) {
     const b = bullets[bi];
     if (b.dead) continue;
@@ -724,13 +815,13 @@ function update(now, dt) {
           spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
         } else {
           sfxHitEnemy(false);
-          spawnExplosion(b.x, b.y, oc, IS_MOBILE ? 3 : 6);
+          spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : oc, IS_MOBILE ? 3 : 6);
         }
-        if (!b.powered) {
+        if (!b.laser) {
           b.dead = true;
-          break; // sparo normale si ferma al primo ostacolo
+          break; // normal / powered bullet stops at first obstacle
         }
-        // sparo potenziato penetra: non si ferma, continua il loop
+        // laser bullet penetrates: continue to next obstacle
       }
     }
   }
@@ -767,6 +858,11 @@ function update(now, dt) {
         lightningEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffe000', IS_MOBILE ? 10 : 22);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '⚡ FRENESIA!', '#ffe000');
+      } else if (f.type === 'laser') {
+        sfxLaser();
+        laserEnd = now + POWERUP_MS;
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#00ffcc', IS_MOBILE ? 8 : 20);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '🔫 LASER!', '#00ffcc');
       }
     }
   }
@@ -804,7 +900,7 @@ function update(now, dt) {
   // win condition
   if (score >= targetScore) {
     if (level >= 30) STATE = 'win';
-    else STATE = 'levelup';
+    else { generateShopOffers(); STATE = 'shop'; }
   }
 }
 
@@ -1190,7 +1286,44 @@ function drawPickup(f) {
   if (f.type === 'heart')     { drawHeartPickup(f);     return; }
   if (f.type === 'coin')      { drawCoinPickup(f);      return; }
   if (f.type === 'lightning') { drawLightningPickup(f); return; }
+  if (f.type === 'laser')     { drawLaserPickup(f);     return; }
   drawFishPickup(f);
+}
+
+function drawLaserPickup(f) {
+  if (f.done) return;
+  const floatY = Math.sin(f.ft) * 8;
+  const cx = f.x + f.w / 2, cy = f.y + f.h / 2 + floatY;
+  const r  = f.w * 0.50;
+  const pulse = 0.88 + 0.12 * Math.sin(f.ft * 4);
+
+  ctx.save();
+  if (SHADOW_ON) { ctx.shadowColor = '#00ffcc'; ctx.shadowBlur = 22; }
+
+  // glow ring
+  ctx.strokeStyle = 'rgba(0,255,200,0.45)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.stroke();
+
+  // dark backing circle
+  ctx.fillStyle = 'rgba(0,15,25,0.72)';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+
+  // horizontal laser beam
+  ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - r * 0.78, cy); ctx.lineTo(cx + r * 0.78, cy); ctx.stroke();
+  // white core
+  ctx.strokeStyle = 'rgba(255,255,255,0.72)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx - r * 0.78, cy); ctx.lineTo(cx + r * 0.78, cy); ctx.stroke();
+
+  // emitter dot (left)
+  ctx.fillStyle = '#00ffcc';
+  ctx.beginPath(); ctx.arc(cx - r * 0.72, cy, 4.5, 0, Math.PI * 2); ctx.fill();
+
+  // tip flash (right — pulses)
+  ctx.fillStyle = `rgba(255,255,255,${0.55 + 0.45 * pulse})`;
+  ctx.beginPath(); ctx.arc(cx + r * 0.78, cy, 3.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
 }
 
 function drawPawPickup(f) {
@@ -1624,11 +1757,20 @@ function drawBullets(now) {
   bullets.forEach(b => {
     if (b.dead) return;
     ctx.save();
-    if (b.powered) {
+    if (b.laser) {
+      if (SHADOW_ON) { ctx.shadowColor = '#00ffcc'; ctx.shadowBlur = 18; }
+      if (!IS_MOBILE) {
+        const trailGrad = ctx.createLinearGradient(b.x - b.r*3, b.y, b.x, b.y);
+        trailGrad.addColorStop(0, 'rgba(0,255,200,0)');
+        trailGrad.addColorStop(1, 'rgba(0,255,200,0.55)');
+        ctx.fillStyle = trailGrad;
+        ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2.5, b.r*0.6, 0, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle = '#00ffcc';
+    } else if (b.powered) {
       if (SHADOW_ON) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 20; }
       ctx.fillStyle = '#ff2200';
       if (!IS_MOBILE) {
-        // fire trail gradient (skip on mobile — gradient create per bullet is costly)
         const trailGrad = ctx.createLinearGradient(b.x - b.r*3, b.y, b.x, b.y);
         trailGrad.addColorStop(0, 'rgba(255,100,0,0)');
         trailGrad.addColorStop(1, 'rgba(255,50,0,0.55)');
@@ -1640,7 +1782,6 @@ function drawBullets(now) {
       if (SHADOW_ON) { ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 12; }
       ctx.fillStyle = '#ffd700';
       if (!IS_MOBILE) {
-        // normal trail
         ctx.fillStyle = 'rgba(255,200,0,0.3)';
         ctx.beginPath(); ctx.ellipse(b.x - b.r*2, b.y, b.r*2, b.r*0.5, 0, 0, Math.PI*2); ctx.fill();
         ctx.fillStyle = '#ffd700';
@@ -1648,7 +1789,6 @@ function drawBullets(now) {
     }
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
     if (!IS_MOBILE) {
-      // core shine (skip on mobile)
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
       ctx.beginPath(); ctx.arc(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.35, 0, Math.PI*2); ctx.fill();
     }
@@ -1721,6 +1861,7 @@ function drawHUD(now) {
   const powered   = now < powerupEnd;
   const dbl       = now < doubleShootEnd;
   const lightning = now < lightningEnd;
+  const laser     = now < laserEnd;
 
   drawFpsMeter(); // versione + FPS in basso a sinistra
 
@@ -1777,6 +1918,7 @@ function drawHUD(now) {
   if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#ff4500', '#ffd700', '🔥 POWER UP!');
   if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
   if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', '⚡ FRENESIA!');
+  if (laser)     drawBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', '🔫 LASER!');
 }
 
 // ─────────────────────────────────────────────
@@ -1892,6 +2034,7 @@ function drawSceneMobile(now) {
   const powered   = now < powerupEnd;
   const dbl       = now < doubleShootEnd;
   const lightning = now < lightningEnd;
+  const laser     = now < laserEnd;
 
   // ── Background: 2 solid rects only ──────────
   drawBackground();
@@ -1909,11 +2052,11 @@ function drawSceneMobile(now) {
   bullets.forEach(b => {
     if (b.dead) return;
     ctx.save();
-    ctx.fillStyle = b.powered ? 'rgba(255,120,0,0.34)' : 'rgba(255,220,80,0.28)';
+    ctx.fillStyle = b.laser ? 'rgba(0,255,200,0.30)' : b.powered ? 'rgba(255,120,0,0.34)' : 'rgba(255,220,80,0.28)';
     ctx.beginPath();
     ctx.ellipse(b.x - b.r * 1.7, b.y, b.r * 2.3, b.r * 0.75, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = b.powered ? '#ff5a00' : '#ffd700';
+    ctx.fillStyle = b.laser ? '#00ffcc' : b.powered ? '#ff5a00' : '#ffd700';
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx.fill();
@@ -1991,6 +2134,158 @@ function drawSceneMobile(now) {
   if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#ff7a18', '#ffd84a', 'POWER UP');
   if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
   if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', 'FRENESIA');
+  if (laser)     drawFlatBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', 'LASER');
+
+  drawFpsMeter();
+}
+
+// ─────────────────────────────────────────────
+//  DRAW SHOP SCREEN
+// ─────────────────────────────────────────────
+function drawShopScreen(now) {
+  const W = canvas.width, H = canvas.height;
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.88)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Panel
+  const pw = Math.min(580, W - 28), ph = Math.min(420, H - 28);
+  const px = (W - pw) / 2, py = (H - ph) / 2;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 30;
+  ctx.fillStyle = 'rgba(8,8,30,0.97)';
+  drawRoundRect(px, py, pw, ph, 22); ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
+  ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 14;
+  drawRoundRect(px + 1, py + 1, pw - 2, ph - 2, 22); ctx.stroke();
+  ctx.restore();
+
+  // Title
+  ctx.save();
+  ctx.font = 'bold 26px "Fredoka One", cursive';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700';
+  ctx.shadowColor = '#ff8c00'; ctx.shadowBlur = 14;
+  ctx.fillText(`⭐ Livello ${level} Superato! — Negozio ⭐`, W / 2, py + 44);
+  ctx.restore();
+
+  // Coin counter
+  drawCoinBadge(W / 2 - 46, py + 66, 9);
+  ctx.save();
+  ctx.font = 'bold 16px "Fredoka One", cursive';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`${coins} monete disponibili`, W / 2 - 32, py + 73);
+  ctx.restore();
+
+  // Two upgrade cards
+  shopBtnRects = [];
+  const margin = 20;
+  const cardW = (pw - margin * 3) / 2;
+  const cardH = Math.min(230, ph - 148);
+  const cardY = py + 86;
+
+  (shopOffers || []).forEach((key, idx) => {
+    const info = UPGRADE_INFO[key];
+    const cx = px + margin + idx * (cardW + margin);
+    const bought = shopOfferBought && shopOfferBought[idx];
+    const canAfford = coins >= UPGRADE_COST;
+
+    // Card bg
+    ctx.save();
+    ctx.fillStyle = bought ? 'rgba(20,60,20,0.88)' : 'rgba(14,14,45,0.92)';
+    drawRoundRect(cx, cardY, cardW, cardH, 14); ctx.fill();
+    ctx.strokeStyle = bought ? '#76ff03' : info.col;
+    ctx.lineWidth = 2;
+    if (!IS_MOBILE && !bought) { ctx.shadowColor = info.col; ctx.shadowBlur = 10; }
+    drawRoundRect(cx, cardY, cardW, cardH, 14); ctx.stroke();
+    ctx.restore();
+
+    // Label
+    ctx.save();
+    ctx.font = 'bold 16px "Fredoka One", cursive';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = bought ? '#76ff03' : info.col;
+    ctx.fillText(info.label, cx + cardW / 2, cardY + 26);
+    ctx.restore();
+
+    // Current upgrade level
+    ctx.save();
+    ctx.font = '12px "Nunito", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(`(acquistato ${upgrades[key]}×)`, cx + cardW / 2, cardY + 43);
+    ctx.restore();
+
+    // Description (word-wrap)
+    ctx.save();
+    ctx.font = '12px "Nunito", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ccc';
+    const words = info.desc.split(' ');
+    let line = '', lineY = cardY + 60;
+    const maxW = cardW - 18;
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW) {
+        ctx.fillText(line, cx + cardW / 2, lineY); line = word; lineY += 15;
+      } else { line = test; }
+    });
+    if (line) ctx.fillText(line, cx + cardW / 2, lineY);
+    ctx.restore();
+
+    // Buy / bought button
+    const btnH = 36, btnW = cardW - 24;
+    const btnX = cx + 12, btnY = cardY + cardH - 46;
+
+    if (bought) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(118,255,3,0.18)';
+      drawRoundRect(btnX, btnY, btnW, btnH, 18); ctx.fill();
+      ctx.font = 'bold 14px "Fredoka One", cursive';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#76ff03';
+      ctx.fillText('✓ Acquistato', btnX + btnW / 2, btnY + btnH / 2);
+      ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.fillStyle = canAfford ? '#1db954' : 'rgba(70,70,70,0.6)';
+      drawRoundRect(btnX, btnY, btnW, btnH, 18); ctx.fill();
+      if (canAfford) {
+        ctx.strokeStyle = '#5dfc8c'; ctx.lineWidth = 1.5;
+        drawRoundRect(btnX, btnY, btnW, btnH, 18); ctx.stroke();
+      }
+      ctx.font = 'bold 13px "Fredoka One", cursive';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = canAfford ? '#fff' : '#666';
+      ctx.fillText(`Acquista (${UPGRADE_COST} 💰)`, btnX + btnW / 2, btnY + btnH / 2);
+      ctx.textBaseline = 'alphabetic';
+      ctx.restore();
+      if (canAfford) shopBtnRects.push({ idx, x: btnX, y: btnY, w: btnW, h: btnH });
+    }
+  });
+
+  // CONTINUA button
+  const cbW = 210, cbH = 46;
+  const cbX = W / 2 - cbW / 2, cbY = py + ph - 58;
+  ctx.save();
+  ctx.fillStyle = '#1565c0';
+  drawRoundRect(cbX, cbY, cbW, cbH, 23); ctx.fill();
+  ctx.strokeStyle = '#42a5f5'; ctx.lineWidth = 2;
+  drawRoundRect(cbX, cbY, cbW, cbH, 23); ctx.stroke();
+  ctx.font = 'bold 19px "Fredoka One", cursive';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('CONTINUA ▶', W / 2, cbY + cbH / 2);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+  shopContinueBtnRect = { x: cbX, y: cbY, w: cbW, h: cbH };
 
   drawFpsMeter();
 }
@@ -2079,6 +2374,9 @@ function loop(ts) {
       ctx.fillText('Clicca ovunque per continuare', W/2, H/2 + 38);
       ctx.restore();
     }
+
+  } else if (STATE === 'shop') {
+    drawShopScreen(ts);
 
   } else if (STATE === 'levelup') {
     drawBackground();
