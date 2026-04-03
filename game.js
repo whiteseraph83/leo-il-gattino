@@ -1863,12 +1863,12 @@ function drawSpawnStats() {
   const gY     = getGY();
   const H      = canvas.height;
   const groundH = H - gY;
-  const cols   = 3;
-  const rows   = Math.ceil(table.length / cols); // 4 rows × 3 cols = 12 slots for 10 items
+  const cols   = 4;
+  const rows   = Math.ceil(table.length / cols); // 3 rows × 4 cols = 12 slots for 10 items
   const rowH   = Math.max(10, (groundH - 10) / rows);
   const fSize  = Math.max(9, Math.min(11, rowH - 2));
   const dotR   = Math.max(3, fSize * 0.40);
-  const colW   = 88;
+  const colW   = 80;
   const sx     = 6, sy = gY + (groundH - rowH * rows) / 2;
   const boxW   = colW * cols, boxH = rowH * rows + 4;
 
