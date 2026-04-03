@@ -385,7 +385,8 @@ function sfxJump() {
 let STATE = 'start'; // start | playing | shop | levelup | gameover | win | paused
 let lives, score, coins, level, targetScore;
 let powerupEnd, invincEnd, lastShot, doubleShootEnd, lightningEnd, laserEnd, pausedState;
-let upgrades; // { fish, heart, enemy, paw, lightning, laser } — persists across levels within run
+let upgrades;       // { fish, heart, enemy, paw, lightning, laser } — persists across levels within run
+let pawsCollected;  // contatore zampette totali raccolte nel run — ogni 3 +1 proiettile permanente
 let shopOffers, shopOfferBought, shopBtnRects, shopContinueBtnRect;
 let _restartBtnRect = null; // set when drawing gameover/win, checked in handleInput
 let scrollX, spawnAcc, nextSpawnGap;
@@ -410,6 +411,7 @@ function initGame() {
   lives = 9; score = 0; coins = 0; level = 1;
   targetScore = getLevelTarget(1);
   upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0, pierce: 0, maxheart: 0 };
+  pawsCollected = 0;
   catPalette = CAT_PALETTES[Math.floor(Math.random() * CAT_PALETTES.length)];
   shopOffers = []; shopOfferBought = []; shopBtnRects = []; shopContinueBtnRect = null;
   initLevel();
@@ -662,10 +664,20 @@ function tryShoot(now) {
   const dbl     = now < doubleShootEnd;
   sfxShoot(powered);
   const bR = laser ? 9 : powered ? 10 : 6;
-  const pl = upgrades ? (upgrades.pierce || 0) : 0; // pierce-left counter
-  bullets.push({ x: CAT_SCREEN_X + 58, y: catY + 22, vx: 11, r: bR, powered, laser, pierceLeft: pl, dead: false });
-  if (dbl) {
-    bullets.push({ x: CAT_SCREEN_X + 52, y: catY + 36, vx: 11, r: bR, powered, laser, pierceLeft: pl, dead: false });
+  const pl = upgrades ? (upgrades.pierce || 0) : 0;
+
+  // proiettili permanenti: 1 + floor(zampette/3); dbl li raddoppia
+  const baseBullets = 1 + Math.floor((pawsCollected || 0) / 3);
+  const count       = dbl ? baseBullets * 2 : baseBullets;
+  const vSpread     = 14; // px tra proiettili
+  const startY      = catY + 22 - ((count - 1) * vSpread) / 2;
+
+  for (let i = 0; i < count; i++) {
+    bullets.push({
+      x: CAT_SCREEN_X + 58 - (i % 2) * 6,
+      y: startY + i * vSpread,
+      vx: 11, r: bR, powered, laser, pierceLeft: pl, dead: false
+    });
   }
 }
 
@@ -924,8 +936,15 @@ function update(now, dt) {
       } else if (f.type === 'paw') {
         sfxPowerUp();
         doubleShootEnd = now + POWERUP_MS;
+        pawsCollected++;
+        const newBullets = 1 + Math.floor(pawsCollected / 3);
+        const prevBullets = 1 + Math.floor((pawsCollected - 1) / 3);
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff9900', IS_MOBILE ? 8 : 18);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
+        if (newBullets > prevBullets) {
+          spawnText(CAT_SCREEN_X + 26, catY - 20, `🐾 +1 PROIETTILE! (${newBullets})`, '#ff9900');
+        } else {
+          spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
+        }
       } else if (f.type === 'heart') {
         sfxPowerUp();
         lives = Math.min(9 + (upgrades ? upgrades.maxheart || 0 : 0), lives + 1);
@@ -2094,6 +2113,22 @@ function drawHUD(now) {
   if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
   if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', '⚡ FRENESIA!');
   if (laser)     drawBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', '🔫 LASER!');
+
+  // indicatore proiettili permanenti (se > 1)
+  const _bullets = 1 + Math.floor((pawsCollected || 0) / 3);
+  if (_bullets > 1) {
+    const _nextAt = (Math.floor((pawsCollected || 0) / 3) + 1) * 3;
+    const _prog   = ((pawsCollected || 0) % 3) / 3;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    drawRoundRect(10, barY, 165, 16, 8); ctx.fill();
+    ctx.fillStyle = '#ff9900';
+    drawRoundRect(10, barY, Math.max(4, 165 * _prog), 16, 8); ctx.fill();
+    ctx.font = 'bold 11px "Nunito", sans-serif';
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    ctx.fillText(`🐾 ×${_bullets} proiettili  (${pawsCollected % 3}/3 → prossimo)`, 14, barY + 12);
+    ctx.restore();
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -2312,6 +2347,8 @@ function drawSceneMobile(now) {
   if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
   if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', 'FRENESIA');
   if (laser)     drawFlatBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', 'LASER');
+  const _bm = 1 + Math.floor((pawsCollected || 0) / 3);
+  if (_bm > 1) drawFlatBar(((pawsCollected || 0) % 3) / 3, '#ff9900', '#ffcc66', `🐾×${_bm} (${(pawsCollected||0)%3}/3)`);
 
   drawFpsMeter();
 }
