@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.8';
+const VERSION = 'v1.0.9';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -53,7 +53,13 @@ const SHOOT_MS_FAST  = 130;  // fish power-up interval (5× faster)
 const POWERUP_MS     = 10000;
 const CAT_SCREEN_X   = 140;
 const GROUND_RATIO   = 0.76;
-const LEVEL_TARGETS  = [0, 10, 22, 36, 52, 70, 90, 115, 142, 172, 205]; // index = level (1–10)
+// Livelli 1-30: gap crescente tra livelli per difficoltà progressiva
+const LEVEL_TARGETS  = [
+  0,                                          // L0 placeholder
+  10, 22, 36, 52, 70, 90, 115, 142, 172, 205, // L1-L10
+  243,287,337,394,459,533,617,712,820,942,     // L11-L20
+  1080,1236,1412,1612,1837,2091,2377,2700,3064,3475 // L21-L30
+];
 
 // ─────────────────────────────────────────────
 //  AUDIO ENGINE  (Web Audio API — no external files)
@@ -407,7 +413,7 @@ function handleInput(e) {
 
 function nextLevel() {
   level++;
-  targetScore = LEVEL_TARGETS[Math.min(level, 10)];
+  targetScore = LEVEL_TARGETS[Math.min(level, 30)];
   sfxLevelUp();
   initLevel();
   STATE = 'playing';
@@ -430,17 +436,26 @@ function spawnPickup(type, x, y) {
   });
 }
 
+// Obstacle HP: 1HP at low levels, up to 3HP at high levels
+function getObstacleHp() {
+  let hp = 1;
+  if (level >= 6  && Math.random() < Math.min(1, (level - 5) / 10)) hp = 2;
+  if (hp === 2 && level >= 14 && Math.random() < Math.min(1, (level - 13) / 17)) hp = 3;
+  return hp;
+}
+
 function spawnEntity(now) {
   const gY = getGY();
   const sx = canvas.width + 80;
   const r  = Math.random();
-  const spd = 1.2 + level * 0.4 + Math.random() * 0.6;
+  // Speed capped at 9 to stay playable at high levels
+  const spd = Math.min(9, 1.2 + level * 0.28 + Math.random() * 0.7);
 
-  // 2HP chance scales with level L1=0% → L10=90%
+  // Dino 2HP chance L1=0% → L10+=90%
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
-  const hp = Math.random() < twoHpChance ? 2 : 1;
+  const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Powerup spawn rates reduced (total ~18%): fish 7%, paw 4%, heart 3%, coin 4%
+  // Powerup spawn rates (total ~18%): fish 7%, paw 4%, heart 3%, coin 4%
   if (r < 0.07) {
     spawnPickup('fish', sx);
   } else if (r < 0.11) {
@@ -450,22 +465,24 @@ function spawnEntity(now) {
   } else if (r < 0.18) {
     spawnPickup('coin', sx);
   } else if (r < 0.46) {
-    dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp, maxHp: hp, at: 0, dead: false });
+    dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp: dinoHp, maxHp: dinoHp, at: 0, dead: false });
   } else if (r < 0.63) {
-    obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', dead: false });
+    const ohp = getObstacleHp();
+    obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', hp: ohp, maxHp: ohp, dead: false });
   } else if (r < 0.80) {
-    obstacles.push({ x: sx, y: gY - 45, w: 55, h: 45, type: 'bush', dead: false });
+    const ohp = getObstacleHp();
+    obstacles.push({ x: sx, y: gY - 45, w: 55, h: 45, type: 'bush', hp: ohp, maxHp: ohp, dead: false });
   } else {
     // combo: obstacle + pickup above (coin or fish)
     const t = Math.random() < 0.5 ? 'rock' : 'bush';
     const oh = t === 'rock' ? 50 : 45;
-    obstacles.push({ x: sx, y: gY - oh, w: t === 'rock' ? 50 : 55, h: oh, type: t, dead: false });
+    const ohp = getObstacleHp();
+    obstacles.push({ x: sx, y: gY - oh, w: t === 'rock' ? 50 : 55, h: oh, type: t, hp: ohp, maxHp: ohp, dead: false });
     spawnPickup(['fish', 'coin', 'coin'][Math.floor(Math.random() * 3)], sx + 20, gY - 185);
   }
 
-  // level 1 is already denser (more enemies), higher levels push spawn gap down
-  nextSpawnGap = 110 + Math.random() * 200 - level * 12;
-  nextSpawnGap = Math.max(nextSpawnGap, 65);
+  // Spawn gap: dense at high levels but never absurd (min 60px)
+  nextSpawnGap = Math.max(60, 130 - level * 3 + Math.random() * 100);
 }
 
 // ─────────────────────────────────────────────
@@ -660,22 +677,32 @@ function update(now, dt) {
     }
   }
 
-  // powered bullet vs obstacles
-  if (powered) {
-    for (let bi = 0; bi < bullets.length; bi++) {
-      const b = bullets[bi];
-      if (b.dead || !b.powered) continue;
-      for (let oi = 0; oi < obstacles.length; oi++) {
-        const o = obstacles[oi];
-        if (o.dead) continue;
-        if (circRect(b.x, b.y, b.r, o.x, o.y, o.w, o.h)) {
+  // bullets vs obstacles:
+  //   • sparo normale  → si distrugge sull'ostacolo, toglie 1 HP
+  //   • sparo potenziato → penetra (non si distrugge), toglie 1 HP
+  for (let bi = 0; bi < bullets.length; bi++) {
+    const b = bullets[bi];
+    if (b.dead) continue;
+    for (let oi = 0; oi < obstacles.length; oi++) {
+      const o = obstacles[oi];
+      if (o.dead) continue;
+      if (circRect(b.x, b.y, b.r, o.x, o.y, o.w, o.h)) {
+        o.hp--;
+        const oc = o.type === 'rock' ? '#9e9e9e' : '#388e3c';
+        if (o.hp <= 0) {
           o.dead = true;
-          b.dead = true;
-          const c = o.type === 'rock' ? '#aaa' : '#3a9a3a';
-          spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, c, 16);
-          spawnText(o.x + o.w / 2, o.y - 5, '💥', '#fff');
-          break;
+          sfxHitEnemy(true);
+          spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
+          spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+        } else {
+          sfxHitEnemy(false);
+          spawnExplosion(b.x, b.y, oc, IS_MOBILE ? 3 : 6);
         }
+        if (!b.powered) {
+          b.dead = true;
+          break; // sparo normale si ferma al primo ostacolo
+        }
+        // sparo potenziato penetra: non si ferma, continua il loop
       }
     }
   }
@@ -743,7 +770,7 @@ function update(now, dt) {
 
   // win condition
   if (score >= targetScore) {
-    if (level >= 10) STATE = 'win';
+    if (level >= 30) STATE = 'win';
     else STATE = 'levelup';
   }
 }
@@ -1439,6 +1466,15 @@ function drawObstacle(o) {
     }
   }
 
+  // HP bar for multi-HP obstacles (same style as dinos)
+  if (o.maxHp > 1) {
+    ctx.fillStyle = '#b71c1c';
+    ctx.fillRect(x, y - 11, w, 5);
+    const barColor = o.hp === o.maxHp ? '#76ff03' : (o.hp > 1 ? '#ffeb3b' : '#ff5722');
+    ctx.fillStyle = barColor;
+    ctx.fillRect(x, y - 11, w * (o.hp / o.maxHp), 5);
+  }
+
   ctx.restore();
 }
 
@@ -1910,7 +1946,7 @@ function loop(ts) {
     drawHUD(ts);
     drawOverlay(
       `⭐ Livello ${level} Superato! ⭐`,
-      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,10)]} punti`],
+      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${LEVEL_TARGETS[Math.min(level+1,30)]} punti`],
       '✨ Clicca per continuare ✨'
     );
 
