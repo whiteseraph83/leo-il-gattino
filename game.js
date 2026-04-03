@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.10';
+const VERSION = 'v1.0.11';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -265,6 +265,30 @@ function sfxLevelUp() {
   });
 }
 
+function sfxLightning() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  // crackle sweep up
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(60, t);
+  o.frequency.exponentialRampToValueAtTime(2200, t + 0.06);
+  o.frequency.exponentialRampToValueAtTime(380, t + 0.28);
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+  o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 0.32);
+  // high-pass noise burst
+  const bufSz = Math.ceil(AC.sampleRate * 0.18);
+  const buf = AC.createBuffer(1, bufSz, AC.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSz; i++) data[i] = Math.random() * 2 - 1;
+  const src = AC.createBufferSource(), ng = AC.createGain();
+  const flt = AC.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = 1200;
+  ng.gain.setValueAtTime(0.38, t);
+  ng.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  src.buffer = buf; src.connect(flt); flt.connect(ng); ng.connect(sfxBus); src.start(t);
+}
+
 function sfxCoin() {
   if (!AC) return;
   const t = AC.currentTime;
@@ -296,7 +320,7 @@ function sfxJump() {
 // ─────────────────────────────────────────────
 let STATE = 'start'; // start | playing | levelup | gameover | win | paused
 let lives, score, coins, level, targetScore;
-let powerupEnd, invincEnd, lastShot, doubleShootEnd, pausedState;
+let powerupEnd, invincEnd, lastShot, doubleShootEnd, lightningEnd, pausedState;
 let _restartBtnRect = null; // set when drawing gameover/win, checked in handleInput
 let scrollX, spawnAcc, nextSpawnGap;
 let bullets, pickups, dinos, obstacles, particles, clouds;
@@ -334,9 +358,10 @@ function initLevel() {
   spawnAcc     = 0;
   nextSpawnGap = 180;
   lastShot     = 0;
-  powerupEnd   = 0;
+  powerupEnd     = 0;
   doubleShootEnd = 0;
-  invincEnd    = 0;
+  lightningEnd   = 0;
+  invincEnd      = 0;
   catVY        = 0;
   catOnGround  = true;
   catWalkT     = 0;
@@ -455,16 +480,18 @@ function spawnEntity(now) {
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Powerup spawn rates: fish 4%, paw 4%, heart 3%, coin 9%
-  if (r < 0.04) {
+  // Powerup spawn rates: lightning 2%, fish 4%, paw 4%, heart 3%, coin 9%
+  if (r < 0.02) {
+    spawnPickup('lightning', sx);
+  } else if (r < 0.06) {
     spawnPickup('fish', sx);
-  } else if (r < 0.08) {
+  } else if (r < 0.10) {
     spawnPickup('paw', sx);
-  } else if (r < 0.11) {
+  } else if (r < 0.13) {
     spawnPickup('heart', sx);
-  } else if (r < 0.20) {
+  } else if (r < 0.22) {
     spawnPickup('coin', sx);
-  } else if (r < 0.48) {
+  } else if (r < 0.50) {
     dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp: dinoHp, maxHp: dinoHp, at: 0, dead: false });
   } else if (r < 0.63) {
     const ohp = getObstacleHp();
@@ -481,8 +508,9 @@ function spawnEntity(now) {
     spawnPickup('coin', sx + 20, gY - 185);
   }
 
-  // Spawn gap: dense at high levels but never absurd (min 60px)
-  nextSpawnGap = Math.max(60, 130 - level * 3 + Math.random() * 100);
+  // Spawn gap: il fulmine dimezza il tempo tra uno spawn e l'altro
+  const baseGap = Math.max(60, 130 - level * 3 + Math.random() * 100);
+  nextSpawnGap = (now < lightningEnd) ? Math.max(22, baseGap * 0.32) : baseGap;
 }
 
 // ─────────────────────────────────────────────
@@ -734,6 +762,11 @@ function update(now, dt) {
         coins++;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffd700', IS_MOBILE ? 6 : 14);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '+1 moneta', '#ffd700');
+      } else if (f.type === 'lightning') {
+        sfxLightning();
+        lightningEnd = now + POWERUP_MS;
+        spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffe000', IS_MOBILE ? 10 : 22);
+        spawnText(CAT_SCREEN_X + 26, catY - 20, '⚡ FRENESIA!', '#ffe000');
       }
     }
   }
@@ -1097,9 +1130,10 @@ function drawCat(now) {
 // ─────────────────────────────────────────────
 function drawPickup(f) {
   if (f.done) return;
-  if (f.type === 'paw')   { drawPawPickup(f);   return; }
-  if (f.type === 'heart') { drawHeartPickup(f); return; }
-  if (f.type === 'coin')  { drawCoinPickup(f);  return; }
+  if (f.type === 'paw')       { drawPawPickup(f);       return; }
+  if (f.type === 'heart')     { drawHeartPickup(f);     return; }
+  if (f.type === 'coin')      { drawCoinPickup(f);      return; }
+  if (f.type === 'lightning') { drawLightningPickup(f); return; }
   drawFishPickup(f);
 }
 
@@ -1150,6 +1184,55 @@ function drawHeartPickup(f) {
   // shine
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.beginPath(); ctx.ellipse(-3, 2, 3, 5, -0.5, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawLightningPickup(f) {
+  if (f.done) return;
+  const floatY = Math.sin(f.ft) * 8;
+  const cx = f.x + f.w / 2, cy = f.y + f.h / 2 + floatY;
+  const r  = f.w * 0.50;
+  const pulse = 0.88 + 0.12 * Math.sin(f.ft * 5); // fast shimmer
+
+  ctx.save();
+  ctx.scale(pulse, pulse);
+  const sx = cx / pulse, sy = cy / pulse; // compensate scale for position
+
+  if (SHADOW_ON) { ctx.shadowColor = '#00eeff'; ctx.shadowBlur = 20; }
+
+  // glow ring
+  ctx.strokeStyle = 'rgba(0,220,255,0.45)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke();
+
+  // dark backing circle
+  ctx.fillStyle = 'rgba(10,0,40,0.65)';
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+
+  // lightning bolt — classic zigzag
+  const bx = sx - r * 0.28, by = sy - r * 0.92;
+  ctx.fillStyle = '#ffe000';
+  ctx.beginPath();
+  ctx.moveTo(bx + r * 0.52, by);              // top-right
+  ctx.lineTo(bx + r * 0.05, by + r * 0.95);  // mid-left
+  ctx.lineTo(bx + r * 0.46, by + r * 0.82);  // center notch
+  ctx.lineTo(bx + r * 0.02, by + r * 1.88);  // bottom
+  ctx.lineTo(bx + r * 0.95, by + r * 0.92);  // mid-right
+  ctx.lineTo(bx + r * 0.54, by + r * 1.05);  // center notch right
+  ctx.closePath();
+  ctx.fill();
+
+  // white hot core
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.beginPath();
+  ctx.moveTo(bx + r * 0.50, by + r * 0.10);
+  ctx.lineTo(bx + r * 0.14, by + r * 0.93);
+  ctx.lineTo(bx + r * 0.46, by + r * 0.82);
+  ctx.lineTo(bx + r * 0.12, by + r * 1.70);
+  ctx.lineTo(bx + r * 0.82, by + r * 0.94);
+  ctx.lineTo(bx + r * 0.52, by + r * 1.04);
+  ctx.closePath();
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -1579,8 +1662,9 @@ function drawPauseBtn(now) {
 
 function drawHUD(now) {
   const W = canvas.width;
-  const powered = now < powerupEnd;
-  const dbl     = now < doubleShootEnd;
+  const powered   = now < powerupEnd;
+  const dbl       = now < doubleShootEnd;
+  const lightning = now < lightningEnd;
 
   drawFpsMeter(); // versione + FPS in basso a sinistra
 
@@ -1634,8 +1718,9 @@ function drawHUD(now) {
     barY += 22;
   }
 
-  if (powered) drawBar((powerupEnd - now) / POWERUP_MS, '#ff4500', '#ffd700', '🔥 POWER UP!');
-  if (dbl)     drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
+  if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#ff4500', '#ffd700', '🔥 POWER UP!');
+  if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
+  if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', '⚡ FRENESIA!');
 }
 
 // ─────────────────────────────────────────────
@@ -1748,8 +1833,9 @@ function drawStartScreen() {
 // ─────────────────────────────────────────────
 function drawSceneMobile(now) {
   const W = canvas.width, H = canvas.height;
-  const powered = now < powerupEnd;
-  const dbl = now < doubleShootEnd;
+  const powered   = now < powerupEnd;
+  const dbl       = now < doubleShootEnd;
+  const lightning = now < lightningEnd;
 
   // ── Background: 2 solid rects only ──────────
   drawBackground();
@@ -1846,8 +1932,9 @@ function drawSceneMobile(now) {
     by += 18;
   }
 
-  if (powered) drawFlatBar((powerupEnd - now) / POWERUP_MS, '#ff7a18', '#ffd84a', 'POWER UP');
-  if (dbl) drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
+  if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#ff7a18', '#ffd84a', 'POWER UP');
+  if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
+  if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', 'FRENESIA');
 
   drawFpsMeter();
 }
