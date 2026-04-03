@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.9';
+const VERSION = 'v1.0.10';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -455,16 +455,16 @@ function spawnEntity(now) {
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Powerup spawn rates (total ~18%): fish 7%, paw 4%, heart 3%, coin 4%
-  if (r < 0.07) {
+  // Powerup spawn rates: fish 4%, paw 4%, heart 3%, coin 9%
+  if (r < 0.04) {
     spawnPickup('fish', sx);
-  } else if (r < 0.11) {
+  } else if (r < 0.08) {
     spawnPickup('paw', sx);
-  } else if (r < 0.14) {
+  } else if (r < 0.11) {
     spawnPickup('heart', sx);
-  } else if (r < 0.18) {
+  } else if (r < 0.20) {
     spawnPickup('coin', sx);
-  } else if (r < 0.46) {
+  } else if (r < 0.48) {
     dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp: dinoHp, maxHp: dinoHp, at: 0, dead: false });
   } else if (r < 0.63) {
     const ohp = getObstacleHp();
@@ -478,7 +478,7 @@ function spawnEntity(now) {
     const oh = t === 'rock' ? 50 : 45;
     const ohp = getObstacleHp();
     obstacles.push({ x: sx, y: gY - oh, w: t === 'rock' ? 50 : 55, h: oh, type: t, hp: ohp, maxHp: ohp, dead: false });
-    spawnPickup(['fish', 'coin', 'coin'][Math.floor(Math.random() * 3)], sx + 20, gY - 185);
+    spawnPickup('coin', sx + 20, gY - 185);
   }
 
   // Spawn gap: dense at high levels but never absurd (min 60px)
