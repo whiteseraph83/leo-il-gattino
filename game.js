@@ -1864,13 +1864,13 @@ function drawSpawnStats() {
   const H      = canvas.height;
   const groundH = H - gY;
   const cols   = 4;
-  const rows   = Math.ceil(table.length / cols); // 3 rows × 4 cols = 12 slots for 10 items
-  const rowH   = Math.max(10, (groundH - 10) / rows);
-  const fSize  = Math.max(9, Math.min(11, rowH - 2));
-  const dotR   = Math.max(3, fSize * 0.40);
+  const rows   = Math.ceil(table.length / cols); // 3 rows × 4 cols
+  const fSize  = 10;
+  const rowH   = 15; // fixed compact height — independent of ground area
+  const dotR   = 3.5;
   const colW   = 80;
-  const sx     = 6, sy = gY + (groundH - rowH * rows) / 2;
-  const boxW   = colW * cols, boxH = rowH * rows + 4;
+  const sx     = 6, sy = gY + 4;
+  const boxW   = colW * cols, boxH = rowH * rows + 6;
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.42)';
@@ -1881,8 +1881,8 @@ function drawSpawnStats() {
   ctx.textAlign = 'left';
 
   table.forEach(({ type, w }, i) => {
-    const col  = Math.floor(i / rows); // column index (0,1,2)
-    const row  = i % rows;             // row within that column
+    const col  = Math.floor(i / rows);
+    const row  = i % rows;
     const x    = sx + col * colW;
     const y    = sy + 2 + row * rowH + rowH / 2;
     const pct  = (w / total * 100).toFixed(1);
