@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.11';
+const VERSION = 'v1.0.12';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -960,38 +960,94 @@ function drawCloud(x, y, w, layer) {
 }
 
 // ─────────────────────────────────────────────
-//  DRAW CAT — mobile simplified version (~8 ops, no bezier/shadow)
+//  DRAW CAT — mobile version (full fidelity, no shadows/blur)
 // ─────────────────────────────────────────────
 function drawCatSimple(now) {
   const x = CAT_SCREEN_X, y = catY;
   const powered = now < powerupEnd;
   const invinc  = now < invincEnd;
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
-  const c = powered ? '#ff6600' : '#f0922b';
-  ctx.fillStyle = c;
-  // body
-  ctx.fillRect(x + 8, y + 24, 44, 26);
-  // head
-  ctx.beginPath(); ctx.arc(x + 42, y + 22, 19, 0, Math.PI * 2); ctx.fill();
-  // ears
-  ctx.beginPath(); ctx.moveTo(x+25,y+10); ctx.lineTo(x+20,y-1); ctx.lineTo(x+35,y+9); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x+51,y+9);  ctx.lineTo(x+58,y-3); ctx.lineTo(x+62,y+9); ctx.fill();
-  // eyes
+
+  const bodyCol = powered ? '#ff6600' : '#f0922b';
+  const headCol = powered ? '#ff7a1a' : '#f5a030';
+  const darkCol = powered ? '#cc4400' : '#e07020';
+  const pupilCol = powered ? '#ff0000' : '#1a1a1a';
+  const legAnim = catOnGround ? Math.sin(catWalkFrame * 1.6) : 0;
+  const legF = legAnim * 7, legB = legAnim * 6;
+  const tailWag = Math.sin(catWalkFrame * 1.6) * 10;
+
+  // ── TAIL (curved) ──
+  ctx.strokeStyle = darkCol; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + 14, y + 42);
+  ctx.quadraticCurveTo(x - 10, y + 28 + tailWag, x + 4, y + 8 + tailWag);
+  ctx.stroke();
+  ctx.strokeStyle = '#fff8e0'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + 8 + tailWag); ctx.lineTo(x + 2, y + tailWag);
+  ctx.stroke();
+
+  // ── BODY (ellipse) ──
+  ctx.fillStyle = bodyCol;
+  ctx.beginPath(); ctx.ellipse(x + 36, y + 38, 22, 17, 0, 0, Math.PI * 2); ctx.fill();
+
+  // ── BODY STRIPES ──
+  ctx.strokeStyle = darkCol; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x+27,y+25); ctx.lineTo(x+27,y+50); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+34,y+23); ctx.lineTo(x+34,y+50); ctx.stroke();
+
+  // ── BACK LEG ──
+  ctx.fillStyle = darkCol;
+  ctx.fillRect(x + 16, y + 46, 9, 14 + legB);
+  ctx.fillStyle = '#ffd0a0';
+  ctx.beginPath(); ctx.ellipse(x + 20, y + 61 + legB, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+  // ── HEAD ──
+  ctx.fillStyle = headCol;
+  ctx.beginPath(); ctx.arc(x + 42, y + 22, 20, 0, Math.PI * 2); ctx.fill();
+
+  // ── EARS (outer + inner pink) ──
+  ctx.fillStyle = headCol;
+  ctx.beginPath(); ctx.moveTo(x+26,y+12); ctx.lineTo(x+21,y-5);  ctx.lineTo(x+36,y+8);  ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x+50,y+10); ctx.lineTo(x+58,y-6);  ctx.lineTo(x+60,y+10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffb6c1';
+  ctx.beginPath(); ctx.moveTo(x+28,y+10); ctx.lineTo(x+24,y-2);  ctx.lineTo(x+35,y+9);  ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x+51,y+9);  ctx.lineTo(x+57,y-3);  ctx.lineTo(x+58,y+9);  ctx.closePath(); ctx.fill();
+
+  // ── EYES (ellipse pupils + shine) ──
   ctx.fillStyle = 'white';
-  ctx.beginPath(); ctx.arc(x+36, y+19, 5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+50, y+19, 5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = powered ? '#f00' : '#111';
-  ctx.beginPath(); ctx.arc(x+36, y+19, 3, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x+50, y+19, 3, 0, Math.PI*2); ctx.fill();
-  // tail
-  ctx.strokeStyle = c; ctx.lineWidth = 5; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x+14, y+40); ctx.lineTo(x+3, y+14); ctx.stroke();
-  // legs
-  const lf = catOnGround ? Math.sin(catWalkFrame * 1.6) * 6 : 0;
-  ctx.fillStyle = c;
-  ctx.fillRect(x+32, y+48, 9, 13 + lf);
-  ctx.fillRect(x+46, y+48, 9, 13 - lf);
-  ctx.fillRect(x+14, y+46, 9, 12 + lf * 0.5);
+  ctx.beginPath(); ctx.ellipse(x+35, y+17, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x+50, y+17, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = pupilCol;
+  ctx.beginPath(); ctx.ellipse(x+35, y+17, 3, 5.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x+50, y+17, 3, 5.5, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.beginPath(); ctx.arc(x+36.5, y+15, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+51.5, y+15, 1.5, 0, Math.PI*2); ctx.fill();
+
+  // ── NOSE ──
+  ctx.fillStyle = '#ff88aa';
+  ctx.beginPath(); ctx.moveTo(x+42,y+24); ctx.lineTo(x+38,y+29); ctx.lineTo(x+46,y+29); ctx.closePath(); ctx.fill();
+
+  // ── MOUTH ──
+  ctx.strokeStyle = '#c05010'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x+42,y+29); ctx.quadraticCurveTo(x+37,y+34,x+33,y+32); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+42,y+29); ctx.quadraticCurveTo(x+47,y+34,x+52,y+32); ctx.stroke();
+
+  // ── WHISKERS ──
+  ctx.strokeStyle = 'rgba(255,255,240,0.9)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x+38,y+26); ctx.lineTo(x+16,y+22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+38,y+29); ctx.lineTo(x+16,y+29); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+46,y+26); ctx.lineTo(x+64,y+22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+46,y+29); ctx.lineTo(x+64,y+29); ctx.stroke();
+
+  // ── FRONT LEGS + PAWS ──
+  ctx.fillStyle = bodyCol;
+  ctx.fillRect(x+34, y+50, 9, 12 + legF);
+  ctx.fillRect(x+46, y+50, 9, 12 - legF);
+  ctx.fillStyle = '#ffd0a0';
+  ctx.beginPath(); ctx.ellipse(x+38, y+63+legF, 5, 3, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x+51, y+63-legF, 5, 3, 0, 0, Math.PI*2); ctx.fill();
 }
 
 // ─────────────────────────────────────────────
