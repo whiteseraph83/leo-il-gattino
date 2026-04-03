@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.12';
+const VERSION = 'v1.0.13';
 
 // ─────────────────────────────────────────────
 //  ORIENTATION GUARD
@@ -480,7 +480,7 @@ function spawnEntity(now) {
   const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
   const dinoHp = Math.random() < twoHpChance ? 2 : 1;
 
-  // Powerup spawn rates: lightning 2%, fish 4%, paw 4%, heart 3%, coin 9%
+  // Powerup spawn rates: lightning 2%, fish 4%, paw 4%, heart 3%, coin 15%
   if (r < 0.02) {
     spawnPickup('lightning', sx);
   } else if (r < 0.06) {
@@ -489,11 +489,11 @@ function spawnEntity(now) {
     spawnPickup('paw', sx);
   } else if (r < 0.13) {
     spawnPickup('heart', sx);
-  } else if (r < 0.22) {
+  } else if (r < 0.28) {
     spawnPickup('coin', sx);
-  } else if (r < 0.50) {
+  } else if (r < 0.58) {
     dinos.push({ x: sx, y: gY - 70, w: 58, h: 70, spd, hp: dinoHp, maxHp: dinoHp, at: 0, dead: false });
-  } else if (r < 0.63) {
+  } else if (r < 0.70) {
     const ohp = getObstacleHp();
     obstacles.push({ x: sx, y: gY - 50, w: 50, h: 50, type: 'rock', hp: ohp, maxHp: ohp, dead: false });
   } else if (r < 0.80) {
@@ -508,9 +508,9 @@ function spawnEntity(now) {
     spawnPickup('coin', sx + 20, gY - 185);
   }
 
-  // Spawn gap: il fulmine dimezza il tempo tra uno spawn e l'altro
-  const baseGap = Math.max(60, 130 - level * 3 + Math.random() * 100);
-  nextSpawnGap = (now < lightningEnd) ? Math.max(22, baseGap * 0.32) : baseGap;
+  // Spawn gap: più denso di base, fulmine lo riduce ulteriormente
+  const baseGap = Math.max(45, 100 - level * 3 + Math.random() * 70);
+  nextSpawnGap = (now < lightningEnd) ? Math.max(18, baseGap * 0.32) : baseGap;
 }
 
 // ─────────────────────────────────────────────
