@@ -62,10 +62,24 @@ const LEVEL_TARGETS  = [
 ];
 
 // ─────────────────────────────────────────────
+//  CAT COLOR PALETTES  (colori realistici)
+// ─────────────────────────────────────────────
+const CAT_PALETTES = [
+  { body: '#f0922b', head: '#f5a030', dark: '#e07020' }, // tabby arancio
+  { body: '#9e9e9e', head: '#bdbdbd', dark: '#707070' }, // grigio tabby
+  { body: '#2d2d2d', head: '#3a3a3a', dark: '#1a1a1a' }, // nero
+  { body: '#f5dfa0', head: '#f8e8b8', dark: '#c8b070' }, // crema/sabbia
+  { body: '#c07830', head: '#d08840', dark: '#a06020' }, // bruno tabby
+  { body: '#d05828', head: '#e07038', dark: '#b04018' }, // rosso/zenzero
+  { body: '#788090', head: '#8898a8', dark: '#566070' }, // blu-grigio
+  { body: '#c89038', head: '#d8a048', dark: '#a87028' }, // miele/cannella
+];
+let catPalette = CAT_PALETTES[0];
+
+// ─────────────────────────────────────────────
 //  UPGRADE SHOP
 // ─────────────────────────────────────────────
-const UPGRADE_COST = 5;          // base cost — scales +2 per livello già acquistato
-const UPGRADE_PIERCE_COST = 20;  // costo fisso per Perforazione
+const UPGRADE_COST = 5;  // base cost — scales +2 per livello già acquistato
 const UPGRADE_INFO = {
   fish:      { label: 'Più Pesciolini',  desc: 'Pesciolino (sparo rapido) appare più spesso',         col: '#00cfff' },
   heart:     { label: 'Più Cuori',       desc: 'Cuore (vita extra) appare più spesso',                 col: '#ff2244' },
@@ -74,13 +88,15 @@ const UPGRADE_INFO = {
   lightning: { label: 'Più Fulmini',     desc: 'Fulmine (frenesia nemici) appare più spesso',          col: '#ffe000' },
   laser:     { label: 'Più Laser',       desc: 'Laser (spari penetranti) appare più spesso',           col: '#00ffcc' },
   pierce:    { label: 'Perforazione +1', desc: 'I proiettili trapassano 1 nemico/ostacolo in più. Si cumula!', col: '#e040fb' },
+  maxheart:  { label: 'Cuore Extra',     desc: 'Aumenta il numero massimo di cuori di 1 per sempre!',         col: '#ff6688' },
 };
-const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser','pierce'];
+const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser','pierce','maxheart'];
 
-// Costo di un upgrade — pierce è fisso 20, gli altri scalano +2 per ogni livello già acquistato
+// Costi: pierce e maxheart iniziano a 15 e scalano +5 per acquisto; gli altri scalano da 5 +2
 function upgradeCost(key) {
-  if (key === 'pierce') return UPGRADE_PIERCE_COST;
-  return UPGRADE_COST + (upgrades ? (upgrades[key] || 0) * 2 : 0);
+  const n = upgrades ? (upgrades[key] || 0) : 0;
+  if (key === 'pierce' || key === 'maxheart') return 15 + n * 5;
+  return UPGRADE_COST + n * 2;
 }
 
 // ─────────────────────────────────────────────
@@ -388,7 +404,8 @@ function getGY() { return Math.floor(canvas.height * GROUND_RATIO); }
 function initGame() {
   lives = 9; score = 0; coins = 0; level = 1;
   targetScore = LEVEL_TARGETS[1];
-  upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0, pierce: 0 };
+  upgrades = { fish: 0, heart: 0, enemy: 0, paw: 0, lightning: 0, laser: 0, pierce: 0, maxheart: 0 };
+  catPalette = CAT_PALETTES[Math.floor(Math.random() * CAT_PALETTES.length)];
   shopOffers = []; shopOfferBought = []; shopBtnRects = []; shopContinueBtnRect = null;
   initLevel();
   STATE = 'playing';
@@ -472,6 +489,10 @@ function handleInput(e) {
           if (coins >= _cost && !shopOfferBought[btn.idx]) {
             coins -= _cost;
             upgrades[_key]++;
+            if (_key === 'maxheart') {
+              // aumenta il cap e regala subito 1 vita
+              lives = Math.min(9 + upgrades.maxheart, lives + 1);
+            }
             shopOfferBought[btn.idx] = true;
             sfxPowerUp();
           }
@@ -559,6 +580,14 @@ function spawnPickup(type, x, y) {
   });
 }
 
+// Dino HP: 1HP ai livelli bassi, fino a 10HP al livello 30
+// maxHp = 1 + floor(level/3) → L1=1, L6=3, L12=5, L18=7, L24=9, L27+=10
+// La distribuzione è uniforme da 1 a maxHp
+function getDinoHp() {
+  const maxHp = Math.min(10, 1 + Math.floor(level / 3));
+  return Math.max(1, Math.ceil(Math.random() * maxHp));
+}
+
 // Obstacle HP: 1HP at low levels, up to 3HP at high levels
 function getObstacleHp() {
   let hp = 1;
@@ -573,9 +602,7 @@ function spawnEntity(now) {
   // Speed capped at 9 to stay playable at high levels
   const spd = Math.min(9, 1.2 + level * 0.28 + Math.random() * 0.7);
 
-  // Dino 2HP chance L1=0% → L10+=90%
-  const twoHpChance = [0, 0, 0.08, 0.22, 0.38, 0.52, 0.63, 0.72, 0.79, 0.85, 0.90][Math.min(level, 10)];
-  const dinoHp = Math.random() < twoHpChance ? 2 : 1;
+  const dinoHp = getDinoHp();
 
   // Build weighted spawn table
   const table = buildSpawnTable();
@@ -787,60 +814,92 @@ function update(now, dt) {
   const catInvinc = now < invincEnd;
 
   // bullet vs dino
+  // pierce meccanica: pierceLeft = HP totali che il proiettile può consumare
+  // - laser: 1 danno, non si consuma
+  // - pierce >= d.hp: uccide il nemico, pierceLeft -= d.hp, bullet sopravvive se pierce > 0
+  // - pierce < d.hp: danneggia il nemico di pierceLeft HP (min 1), bullet muore
   for (let bi = 0; bi < bullets.length; bi++) {
     const b = bullets[bi];
     if (b.dead) continue;
     for (let di = 0; di < dinos.length; di++) {
       const d = dinos[di];
       if (d.dead) continue;
-      if (circRect(b.x, b.y, b.r, d.x, d.y, d.w, d.h)) {
-        // laser: penetra sempre; pierce: decrementa fino a 0; altrimenti muore
-        if (!b.laser) {
-          if (b.pierceLeft > 0) { b.pierceLeft--; }
-          else { b.dead = true; }
-        }
-        spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : b.pierceLeft >= 0 ? '#e040fb' : '#ff9900', 8);
+      if (!circRect(b.x, b.y, b.r, d.x, d.y, d.w, d.h)) continue;
+
+      if (b.laser) {
+        spawnExplosion(b.x, b.y, '#00ffcc', 8);
         d.hp--;
         if (d.hp <= 0) {
-          d.dead = true;
-          score++;
+          d.dead = true; score++;
           sfxHitEnemy(true);
           spawnExplosion(d.x + d.w / 2, d.y + d.h / 2, '#ffd700', 20);
           spawnText(d.x + d.w / 2, d.y - 10, '+1', '#ffd700');
-        } else {
-          sfxHitEnemy(false);
-        }
-        if (b.dead) break;
+        } else { sfxHitEnemy(false); }
+      } else if (b.pierceLeft >= d.hp) {
+        // pierce sufficiente: uccide e bullet sopravvive (se pierce avanzato)
+        b.pierceLeft -= d.hp;
+        spawnExplosion(b.x, b.y, '#e040fb', 8);
+        d.hp = 0; d.dead = true; score++;
+        sfxHitEnemy(true);
+        spawnExplosion(d.x + d.w / 2, d.y + d.h / 2, '#ffd700', 20);
+        spawnText(d.x + d.w / 2, d.y - 10, '+1', '#ffd700');
+        if (b.pierceLeft <= 0) { b.dead = true; break; }
+      } else {
+        // pierce insufficiente: bullet muore, nemico subisce pierceLeft danni (min 1)
+        const dmg = Math.max(1, b.pierceLeft);
+        spawnExplosion(b.x, b.y, b.pierceLeft > 0 ? '#e040fb' : '#ff9900', 8);
+        d.hp -= dmg; b.pierceLeft = 0; b.dead = true;
+        if (d.hp <= 0) {
+          d.dead = true; score++;
+          sfxHitEnemy(true);
+          spawnExplosion(d.x + d.w / 2, d.y + d.h / 2, '#ffd700', 20);
+          spawnText(d.x + d.w / 2, d.y - 10, '+1', '#ffd700');
+        } else { sfxHitEnemy(false); }
+        break;
       }
     }
   }
 
-  // bullets vs obstacles:
-  //   • normale / potenziato (fish) → si distrugge sull'ostacolo, toglie 1 HP
-  //   • laser → penetra, toglie 1 HP e continua
+  // bullets vs obstacles — stessa meccanica pierce dei dino
   for (let bi = 0; bi < bullets.length; bi++) {
     const b = bullets[bi];
     if (b.dead) continue;
     for (let oi = 0; oi < obstacles.length; oi++) {
       const o = obstacles[oi];
       if (o.dead) continue;
-      if (circRect(b.x, b.y, b.r, o.x, o.y, o.w, o.h)) {
+      if (!circRect(b.x, b.y, b.r, o.x, o.y, o.w, o.h)) continue;
+
+      const oc = o.type === 'rock' ? '#9e9e9e' : '#388e3c';
+      if (b.laser) {
         o.hp--;
-        const oc = o.type === 'rock' ? '#9e9e9e' : '#388e3c';
         if (o.hp <= 0) {
-          o.dead = true;
-          sfxHitEnemy(true);
+          o.dead = true; sfxHitEnemy(true);
           spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
           spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
         } else {
           sfxHitEnemy(false);
-          spawnExplosion(b.x, b.y, b.laser ? '#00ffcc' : oc, IS_MOBILE ? 3 : 6);
+          spawnExplosion(b.x, b.y, '#00ffcc', IS_MOBILE ? 3 : 6);
         }
-        if (!b.laser) {
-          if (b.pierceLeft > 0) { b.pierceLeft--; }
-          else { b.dead = true; break; }
+      } else if (b.pierceLeft >= o.hp) {
+        b.pierceLeft -= o.hp;
+        spawnExplosion(b.x, b.y, '#e040fb', IS_MOBILE ? 3 : 6);
+        o.hp = 0; o.dead = true; sfxHitEnemy(true);
+        spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
+        spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+        if (b.pierceLeft <= 0) { b.dead = true; break; }
+      } else {
+        const dmg = Math.max(1, b.pierceLeft);
+        spawnExplosion(b.x, b.y, b.pierceLeft > 0 ? '#e040fb' : oc, IS_MOBILE ? 3 : 6);
+        o.hp -= dmg; b.pierceLeft = 0; b.dead = true;
+        if (o.hp <= 0) {
+          o.dead = true; sfxHitEnemy(true);
+          spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
+          spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+        } else {
+          sfxHitEnemy(false);
+          spawnExplosion(b.x, b.y, oc, IS_MOBILE ? 3 : 6);
         }
-        // laser / pierce: continue to next obstacle
+        break;
       }
     }
   }
@@ -864,7 +923,7 @@ function update(now, dt) {
         spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
       } else if (f.type === 'heart') {
         sfxPowerUp();
-        lives = Math.min(9, lives + 1);
+        lives = Math.min(9 + (upgrades ? upgrades.maxheart || 0 : 0), lives + 1);
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff2244', IS_MOBILE ? 8 : 14);
         spawnText(CAT_SCREEN_X + 26, catY - 20, '❤️ VITA!', '#ff2244');
       } else if (f.type === 'coin') {
@@ -1083,9 +1142,10 @@ function drawCatSimple(now) {
   const invinc  = now < invincEnd;
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
 
-  const bodyCol = powered ? '#ff6600' : '#f0922b';
-  const headCol = powered ? '#ff7a1a' : '#f5a030';
-  const darkCol = powered ? '#cc4400' : '#e07020';
+  const _pal    = catPalette || CAT_PALETTES[0];
+  const bodyCol = powered ? '#ff6600' : _pal.body;
+  const headCol = powered ? '#ff7a1a' : _pal.head;
+  const darkCol = powered ? '#cc4400' : _pal.dark;
   const pupilCol = powered ? '#ff0000' : '#1a1a1a';
   const legAnim = catOnGround ? Math.sin(catWalkFrame * 1.6) : 0;
   const legF = legAnim * 7, legB = legAnim * 6;
@@ -1175,12 +1235,17 @@ function drawCat(now) {
   const invinc  = now < invincEnd;
   if (invinc && Math.floor(now / 80) % 2 === 0) return;
 
+  const _pal2  = catPalette || CAT_PALETTES[0];
+  const _body  = powered ? '#ff6600' : _pal2.body;
+  const _head  = powered ? '#ff7a1a' : _pal2.head;
+  const _dark  = powered ? '#cc4400' : _pal2.dark;
+
   ctx.save();
   if (powered && SHADOW_ON) { ctx.shadowColor = '#ff4500'; ctx.shadowBlur = 18; }
 
   // TAIL
   ctx.save();
-  ctx.strokeStyle = '#e07020';
+  ctx.strokeStyle = _dark;
   ctx.lineWidth = 7;
   ctx.lineCap = 'round';
   const tailWag = Math.sin(catWalkFrame * 1.6) * 12;
@@ -1198,33 +1263,33 @@ function drawCat(now) {
   ctx.restore();
 
   // BODY
-  ctx.fillStyle = '#f0922b';
+  ctx.fillStyle = _body;
   ctx.beginPath();
   ctx.ellipse(x + 36, y + 38, 22, 17, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // body stripes
-  ctx.strokeStyle = '#c06010';
+  ctx.strokeStyle = _dark;
   ctx.lineWidth = 1.5;
   [x+26, x+33, x+40].forEach(sx => {
     ctx.beginPath(); ctx.moveTo(sx, y+24); ctx.lineTo(sx, y+50); ctx.stroke();
   });
 
   // BACK LEGS
-  ctx.fillStyle = '#e07820';
+  ctx.fillStyle = _dark;
   const legB = catOnGround ? Math.sin(catWalkFrame * 1.6) * 6 : 0;
   // back-left leg
   ctx.fillRect(x + 16, y + 46, 9, 14 + legB);
   // back-right is behind, skip
 
   // HEAD
-  ctx.fillStyle = '#f5a030';
+  ctx.fillStyle = _head;
   ctx.beginPath();
   ctx.arc(x + 42, y + 22, 20, 0, Math.PI * 2);
   ctx.fill();
 
   // EARS
-  ctx.fillStyle = '#f5a030';
+  ctx.fillStyle = _head;
   // left ear
   ctx.beginPath();
   ctx.moveTo(x + 26, y + 12);
@@ -1268,7 +1333,7 @@ function drawCat(now) {
   ctx.fill();
 
   // MOUTH
-  ctx.strokeStyle = '#c05010';
+  ctx.strokeStyle = _dark;
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(x+42,y+29); ctx.quadraticCurveTo(x+37,y+34,x+33,y+32); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(x+42,y+29); ctx.quadraticCurveTo(x+47,y+34,x+52,y+32); ctx.stroke();
@@ -1282,7 +1347,7 @@ function drawCat(now) {
   });
 
   // FRONT LEGS (animated)
-  ctx.fillStyle = '#f0922b';
+  ctx.fillStyle = _body;
   const legF = catOnGround ? Math.sin(catWalkFrame * 1.6) * 7 : 0;
   ctx.fillRect(x + 34, y + 50, 9, 12 + legF);
   ctx.fillRect(x + 46, y + 50, 9, 12 - legF);
@@ -1553,7 +1618,7 @@ function drawFishPickup(f) {
 // ─────────────────────────────────────────────
 function drawDinoSimple(d) {
   if (d.dead) return;
-  const sc = d.maxHp > 1 ? 1.35 : 1.0;
+  const sc = 1.0 + (d.maxHp - 1) * 0.12; // 1HP=1.0×, 5HP=1.48×, 10HP=2.08×
   const bw = d.w * sc, bh = d.h * sc;
   const x = d.x - (bw - d.w) * 0.5, y = d.y;
   const lg = Math.sin(d.at / 190) * 5;
@@ -1577,8 +1642,17 @@ function drawDinoSimple(d) {
   for (let i = 0; i < 3; i++) ctx.fillRect(x + bw*(0.3+i*0.14), y + bh*0.16, 7, 12);
   // HP bar
   if (d.maxHp > 1) {
+    const ratio = d.hp / d.maxHp;
     ctx.fillStyle = '#b71c1c'; ctx.fillRect(x, y - 10, bw, 5);
-    ctx.fillStyle = '#76ff03'; ctx.fillRect(x, y - 10, bw * (d.hp / d.maxHp), 5);
+    ctx.fillStyle = ratio > 0.66 ? '#76ff03' : ratio > 0.33 ? '#ffeb3b' : '#ff5722';
+    ctx.fillRect(x, y - 10, bw * ratio, 5);
+    if (d.maxHp >= 3) {
+      ctx.save();
+      ctx.font = 'bold 8px "Nunito", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.fillText(`${d.hp}/${d.maxHp}`, x + bw / 2, y - 7.5);
+      ctx.restore();
+    }
   }
 }
 
@@ -1588,7 +1662,7 @@ function drawDinoSimple(d) {
 function drawDino(d) {
   if (IS_MOBILE) { drawDinoSimple(d); return; }
   if (d.dead) return;
-  const sc = d.maxHp > 1 ? 1.35 : 1.0;  // 2HP dinos are 35% bigger
+  const sc = 1.0 + (d.maxHp - 1) * 0.12; // 1HP=1.0×, 5HP=1.48×, 10HP=2.08×
   const x = d.x, y = d.y, w = d.w, h = d.h;
   const bob = Math.sin(d.at / 190) * 3;
 
@@ -1671,10 +1745,17 @@ function drawDino(d) {
 
   // HP bar
   if (d.maxHp > 1) {
-    ctx.fillStyle = '#b71c1c';
-    ctx.fillRect(x, y - 12, w, 6);
-    ctx.fillStyle = '#76ff03';
-    ctx.fillRect(x, y - 12, w * (d.hp / d.maxHp), 6);
+    const ratio = d.hp / d.maxHp;
+    ctx.fillStyle = '#b71c1c'; ctx.fillRect(x, y - 12, w, 6);
+    ctx.fillStyle = ratio > 0.66 ? '#76ff03' : ratio > 0.33 ? '#ffeb3b' : '#ff5722';
+    ctx.fillRect(x, y - 12, w * ratio, 6);
+    if (d.maxHp >= 3) {
+      ctx.save();
+      ctx.font = 'bold 9px "Nunito", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.fillText(`${d.hp}/${d.maxHp}`, x + w / 2, y - 9);
+      ctx.restore();
+    }
   }
 
   ctx.restore();
@@ -1951,8 +2032,9 @@ function drawHUD(now) {
 
   drawFpsMeter(); // versione + FPS in basso a sinistra
 
-  // hearts
-  for (let i = 0; i < 9; i++) {
+  // hearts (cap dinamico: 9 + maxheart upgrade)
+  const _maxLives = 9 + (upgrades ? upgrades.maxheart || 0 : 0);
+  for (let i = 0; i < _maxLives; i++) {
     drawHeart(14 + i * 26, 10, 10, i < lives);
   }
 
@@ -2159,7 +2241,8 @@ function drawSceneMobile(now) {
   drawParticles();
 
   // ── Minimal HUD ───────────────────────────────
-  for (let i = 0; i < 9; i++) {
+  const _maxLivesM = 9 + (upgrades ? upgrades.maxheart || 0 : 0);
+  for (let i = 0; i < _maxLivesM; i++) {
     drawHeart(18 + i * 26, 12, 10, i < lives);
   }
 
