@@ -1,0 +1,8 @@
+{
+  "advertisement": {
+    "minimumDelayBetweenInterstitial": 60,
+    "interstitial": {
+      "placementFallback": "level_completed"
+    }
+  }
+}

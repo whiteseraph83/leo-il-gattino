@@ -3,9 +3,7 @@ const VERSION = 'v1.0.14';
 // ─────────────────────────────────────────────
 //  LOCALISATION
 // ─────────────────────────────────────────────
-let currentLang = (() => {
-  try { return localStorage.getItem('leogame_lang') || 'en'; } catch(e) { return 'en'; }
-})();
+let currentLang = 'en';
 
 const STRINGS = {
   en: {
@@ -141,6 +139,9 @@ function T(key, ...args) {
 function setLang(lang) {
   currentLang = lang;
   try { localStorage.setItem('leogame_lang', lang); } catch(e) {}
+  if (typeof bridge !== 'undefined') {
+    try { bridge.storage.set({ lang }); } catch(e) {}
+  }
   const pwTitle = document.querySelector('.pw-title');
   const pwSub   = document.querySelector('.pw-sub');
   if (pwTitle) pwTitle.textContent = T('pw_title');
@@ -264,6 +265,7 @@ function upgradeCost(key) {
 // ─────────────────────────────────────────────
 let AC = null;
 let sfxBus = null, musicBus = null;
+let _audioBridgeMuted = false;
 let musicLoopTimer = null;
 
 // Note frequencies (Hz)
@@ -277,8 +279,8 @@ function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   AC = new (window.AudioContext || window.webkitAudioContext)();
   const master = AC.createGain(); master.gain.value = 0.80; master.connect(AC.destination);
-  sfxBus   = AC.createGain(); sfxBus.gain.value   = 0.70; sfxBus.connect(master);
-  musicBus = AC.createGain(); musicBus.gain.value  = 0.22; musicBus.connect(master);
+  sfxBus   = AC.createGain(); sfxBus.gain.value   = _audioBridgeMuted ? 0 : 0.70; sfxBus.connect(master);
+  musicBus = AC.createGain(); musicBus.gain.value  = _audioBridgeMuted ? 0 : 0.22; musicBus.connect(master);
   scheduleMusicLoop();
 }
 
@@ -906,7 +908,7 @@ function hitCat(now) {
   invincEnd = now + 1000;
   sfxHitCat();
   spawnExplosion(CAT_SCREEN_X + 26, catY + 27, '#ff3333', 10);
-  if (lives <= 0) { STATE = 'gameover'; }
+  if (lives <= 0) { STATE = 'gameover'; showInterstitialAd(); }
 }
 
 // ─────────────────────────────────────────────
@@ -1163,7 +1165,7 @@ function update(now, dt) {
 
   // livelli infiniti — ad ogni superamento si apre il negozio
   if (score >= targetScore) {
-    generateShopOffers(); STATE = 'shop';
+    generateShopOffers(); STATE = 'shop'; showInterstitialAd();
   }
 }
 
@@ -2826,9 +2828,60 @@ function loop(ts) {
 }
 
 // ─────────────────────────────────────────────
+//  BRIDGE HELPERS
+// ─────────────────────────────────────────────
+function showInterstitialAd() {
+  if (typeof bridge === 'undefined') return;
+  if (!bridge.advertisement.isInterstitialSupported) return;
+  bridge.advertisement.showInterstitial('level_completed');
+}
+
+// ─────────────────────────────────────────────
 //  BOOT
 // ─────────────────────────────────────────────
-checkOrientation();
-initLevel(); // pre-init so canvas is ready
-requestAnimationFrame(loop);
+function bootGame() {
+  checkOrientation();
+  initLevel();
+  requestAnimationFrame(loop);
+}
+
+if (typeof bridge !== 'undefined') {
+  bridge.initialize()
+    .then(() => {
+      // Determine language: bridge.storage saved pref → platform language → 'en'
+      const platformLang = bridge.platform.language;
+      const fallbackLang = (platformLang && platformLang.startsWith('it')) ? 'it' : 'en';
+
+      bridge.storage.get(['lang'])
+        .then(values => { currentLang = values[0] || fallbackLang; })
+        .catch(() => { currentLang = fallbackLang; })
+        .finally(() => { setLang(currentLang); });
+
+      // Universal audio mute/unmute handler
+      bridge.platform.on(bridge.EVENT_NAME.AUDIO_STATE_CHANGED, isEnabled => {
+        _audioBridgeMuted = !isEnabled;
+        if (sfxBus)   sfxBus.gain.value   = isEnabled ? 0.70 : 0;
+        if (musicBus) musicBus.gain.value  = isEnabled ? 0.22 : 0;
+      });
+      if (!bridge.platform.isAudioEnabled) _audioBridgeMuted = true;
+
+      // Universal pause handler
+      bridge.platform.on(bridge.EVENT_NAME.PAUSE_STATE_CHANGED, isPaused => {
+        if (isPaused  && STATE === 'playing') STATE = 'paused';
+        if (!isPaused && STATE === 'paused')  STATE = 'playing';
+      });
+
+      bootGame();
+      bridge.platform.sendMessage('game_ready');
+    })
+    .catch(() => {
+      currentLang = (() => { try { return localStorage.getItem('leogame_lang') || 'en'; } catch(e) { return 'en'; } })();
+      setLang(currentLang);
+      bootGame();
+    });
+} else {
+  currentLang = (() => { try { return localStorage.getItem('leogame_lang') || 'en'; } catch(e) { return 'en'; } })();
+  setLang(currentLang);
+  bootGame();
+}
 
