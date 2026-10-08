@@ -1,6 +1,171 @@
 const VERSION = 'v1.0.14';
 
 // ─────────────────────────────────────────────
+//  LOCALISATION
+// ─────────────────────────────────────────────
+let currentLang = (() => {
+  try { return localStorage.getItem('leogame_lang') || 'en'; } catch(e) { return 'en'; }
+})();
+
+const STRINGS = {
+  en: {
+    title:       '🐱 Sir Leo the Brave 🐱',
+    start_l1:    'Your hero fires automatically!',
+    start_l2:    'Click / tap  →  LEAP',
+    start_l3:    'Grab the 🐟 for POWER UP!',
+    start_hint:  '✨ Click anywhere to begin your quest ✨',
+    hud_score:   (s,t) => `Score: ${s} / ${t}`,
+    hud_level:   (l)   => `Stage ${l}`,
+    pu_power:    '🔥 POWER UP!',
+    pu_double:   '🐾 DOUBLE FIRE!',
+    pu_frenzy:   '⚡ FRENZY!',
+    pu_laser:    '🔫 LASER!',
+    pu_bullets:  (n,c) => `🐾 ×${n} projectiles  (${c}/3 → next)`,
+    pu_power_s:  'POWER UP',
+    pu_double_s: 'DOUBLE',
+    pu_frenzy_s: 'FRENZY',
+    pu_laser_s:  'LASER',
+    pu_bul_s:    (n,c) => `🐾×${n} (${c}/3)`,
+    sp_power:    '🔥 POWER UP!',
+    sp_double:   '🐾 DOUBLE FIRE!',
+    sp_bullet:   (n)   => `🐾 +1 PROJECTILE! (${n})`,
+    sp_heart:    '❤️ LIFE!',
+    sp_coin:     '+1 gold',
+    sp_frenzy:   '⚡ FRENZY!',
+    sp_laser:    '🔫 LASER!',
+    sp_crack:    'SHATTER!',
+    paused:      '⏸ PAUSED',
+    paused_hint: 'Click anywhere to resume',
+    lvlup_title: (l)   => `⭐ Stage ${l} Cleared! ⭐`,
+    lvlup_l1:    (s,c) => `Well fought! Score: ${s}  Gold: ${c}`,
+    lvlup_l2:    (t)   => `Next challenge: ${t} points`,
+    lvlup_hint:  '✨ Click to press onward ✨',
+    shop_title:  (l)   => `⭐ Stage ${l} Complete! — Armory ⭐`,
+    shop_coins:  (n)   => `${n} gold available`,
+    shop_times:  (n)   => `(acquired ${n}×)`,
+    shop_buy:    (c)   => `Buy (${c} 💰)`,
+    shop_got:    '✓ Acquired',
+    shop_cont:   'CONTINUE ▶',
+    go_title:    '💀 Quest Failed 💀',
+    go_l1:       (s)   => `Your final score: ${s}`,
+    go_l2:       (l)   => `fallen at Stage ${l}`,
+    go_l3:       (c)   => `Gold gathered: ${c}`,
+    restart:     '🔄 PLAY AGAIN',
+    win_title:   '🏆 VICTORY! 🏆',
+    win_l1:      'Leo has vanquished all the beasts!',
+    win_l2:      (s,c) => `Score: ${s}  |  Gold: ${c}`,
+    win_l3:      'A true champion rises! 🎉',
+    ss_lightning:'Thunder',   ss_fish:  'Fish',    ss_paw:   'Paw',
+    ss_heart:    'Heart',     ss_coin:  'Coin',    ss_laser: 'Laser',
+    ss_dino:     'Beast',     ss_rock:  'Rock',    ss_bush:  'Bush',    ss_combo: 'Combo',
+    ul_fish:     'More Enchanted Fish',   ud_fish:     'Enchanted Fish (rapid fire) appears more often',
+    ul_heart:    'More Life Orbs',        ud_heart:    'Life Orb (extra life) spawns more often',
+    ul_enemy:    'More Foes',             ud_enemy:    'More lizard beasts on the field — more glory to earn!',
+    ul_paw:      'More Paw Runes',        ud_paw:      'Paw Rune (double fire) appears more often',
+    ul_lightning:'More Thunderbolts',     ud_lightning:'Thunderbolt (beast frenzy) appears more often',
+    ul_laser:    'More Arcane Beams',     ud_laser:    'Arcane Beam (piercing shots) appears more often',
+    ul_pierce:   'Piercing +1',           ud_pierce:   'Projectiles pierce 1 more foe or obstacle. Stacks!',
+    ul_maxheart: 'Extra Life Orb',        ud_maxheart: 'Increase your max life orbs by 1 — forever!',
+    pw_title:    'Rotate Your Device!',
+    pw_sub:      'Play in landscape mode 🐱<br>Leo awaits!',
+  },
+  it: {
+    title:       '🐱 Leo il Gattino 🐱',
+    start_l1:    'Il gatto spara automaticamente!',
+    start_l2:    'Clicca / tocca  →  SALTA',
+    start_l3:    'Mangia i 🐟 per il POWER UP!',
+    start_hint:  '✨ Clicca ovunque per iniziare ✨',
+    hud_score:   (s,t) => `Punti: ${s} / ${t}`,
+    hud_level:   (l)   => `Livello ${l}`,
+    pu_power:    '🔥 POWER UP!',
+    pu_double:   '🐾 DOPPIO SPARO!',
+    pu_frenzy:   '⚡ FRENESIA!',
+    pu_laser:    '🔫 LASER!',
+    pu_bullets:  (n,c) => `🐾 ×${n} proiettili  (${c}/3 → prossimo)`,
+    pu_power_s:  'POWER UP',
+    pu_double_s: 'DOUBLE',
+    pu_frenzy_s: 'FRENESIA',
+    pu_laser_s:  'LASER',
+    pu_bul_s:    (n,c) => `🐾×${n} (${c}/3)`,
+    sp_power:    '🔥 POWER UP!',
+    sp_double:   '🐾 DOPPIO SPARO!',
+    sp_bullet:   (n)   => `🐾 +1 PROIETTILE! (${n})`,
+    sp_heart:    '❤️ VITA!',
+    sp_coin:     '+1 moneta',
+    sp_frenzy:   '⚡ FRENESIA!',
+    sp_laser:    '🔫 LASER!',
+    sp_crack:    'CRACK!',
+    paused:      '⏸ PAUSA',
+    paused_hint: 'Clicca ovunque per continuare',
+    lvlup_title: (l)   => `⭐ Livello ${l} Superato! ⭐`,
+    lvlup_l1:    (s,c) => `Ottimo lavoro! Punti: ${s}  Monete: ${c}`,
+    lvlup_l2:    (t)   => `Prossimo obiettivo: ${t} punti`,
+    lvlup_hint:  '✨ Clicca per continuare ✨',
+    shop_title:  (l)   => `⭐ Livello ${l} Superato! — Negozio ⭐`,
+    shop_coins:  (n)   => `${n} monete disponibili`,
+    shop_times:  (n)   => `(acquistato ${n}×)`,
+    shop_buy:    (c)   => `Acquista (${c} 💰)`,
+    shop_got:    '✓ Acquistato',
+    shop_cont:   'CONTINUA ▶',
+    go_title:    '💀 Game Over 💀',
+    go_l1:       (s)   => `Hai totalizzato ${s} punti`,
+    go_l2:       (l)   => `al Livello ${l}`,
+    go_l3:       (c)   => `Monete raccolte: ${c}`,
+    restart:     '🔄 GIOCA ANCORA',
+    win_title:   '🏆 HAI VINTO! 🏆',
+    win_l1:      'Leo ha sconfitto tutti i dinosauri!',
+    win_l2:      (s,c) => `Punti: ${s}  |  Monete: ${c}`,
+    win_l3:      'Sei un campione! 🎉',
+    ss_lightning:'Fulmine',   ss_fish:  'Pesciol.', ss_paw:   'Zampet.',
+    ss_heart:    'Cuore',     ss_coin:  'Moneta',   ss_laser: 'Laser',
+    ss_dino:     'Dino',      ss_rock:  'Roccia',   ss_bush:  'Cespug.', ss_combo: 'Combo',
+    ul_fish:     'Più Pesciolini',     ud_fish:     'Pesciolino (sparo rapido) appare più spesso',
+    ul_heart:    'Più Cuori',          ud_heart:    'Cuore (vita extra) appare più spesso',
+    ul_enemy:    'Più Nemici',         ud_enemy:    'Più dinosauri in campo — più punti da guadagnare!',
+    ul_paw:      'Più Zampette',       ud_paw:      'Zampetta (doppio sparo) appare più spesso',
+    ul_lightning:'Più Fulmini',        ud_lightning:'Fulmine (frenesia nemici) appare più spesso',
+    ul_laser:    'Più Laser',          ud_laser:    'Laser (spari penetranti) appare più spesso',
+    ul_pierce:   'Perforazione +1',    ud_pierce:   'I proiettili trapassano 1 nemico/ostacolo in più. Si cumula!',
+    ul_maxheart: 'Cuore Extra',        ud_maxheart: 'Aumenta il numero massimo di cuori di 1 per sempre!',
+    pw_title:    'Ruota il Telefono!',
+    pw_sub:      'Gioca in modalità orizzontale 🐱<br>Leo ti aspetta!',
+  }
+};
+
+function T(key, ...args) {
+  const s = STRINGS[currentLang][key];
+  if (s === undefined) return key;
+  return typeof s === 'function' ? s(...args) : s;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  try { localStorage.setItem('leogame_lang', lang); } catch(e) {}
+  const pwTitle = document.querySelector('.pw-title');
+  const pwSub   = document.querySelector('.pw-sub');
+  if (pwTitle) pwTitle.textContent = T('pw_title');
+  if (pwSub)   pwSub.innerHTML     = T('pw_sub');
+}
+
+function getUpgradeInfo() {
+  return {
+    fish:      { label: T('ul_fish'),      desc: T('ud_fish'),      col: '#00cfff' },
+    heart:     { label: T('ul_heart'),     desc: T('ud_heart'),     col: '#ff2244' },
+    enemy:     { label: T('ul_enemy'),     desc: T('ud_enemy'),     col: '#4caf50' },
+    paw:       { label: T('ul_paw'),       desc: T('ud_paw'),       col: '#ff9900' },
+    lightning: { label: T('ul_lightning'), desc: T('ud_lightning'), col: '#ffe000' },
+    laser:     { label: T('ul_laser'),     desc: T('ud_laser'),     col: '#00ffcc' },
+    pierce:    { label: T('ul_pierce'),    desc: T('ud_pierce'),    col: '#e040fb' },
+    maxheart:  { label: T('ul_maxheart'),  desc: T('ud_maxheart'),  col: '#ff6688' },
+  };
+}
+
+// Language toggle button (top-right, just left of pause button)
+const LANG_BTN = { x: 0, y: 5, w: 38, h: 28 }; // x computed dynamically in drawLangBtn
+
+setLang(currentLang); // apply to portrait wall on load
+
+// ─────────────────────────────────────────────
 //  ORIENTATION GUARD
 // ─────────────────────────────────────────────
 const portraitWall = document.getElementById('portrait-wall');
@@ -85,16 +250,6 @@ let catPalette = CAT_PALETTES[0];
 //  UPGRADE SHOP
 // ─────────────────────────────────────────────
 const UPGRADE_COST = 5;  // base cost — scales +2 per livello già acquistato
-const UPGRADE_INFO = {
-  fish:      { label: 'Più Pesciolini',  desc: 'Pesciolino (sparo rapido) appare più spesso',         col: '#00cfff' },
-  heart:     { label: 'Più Cuori',       desc: 'Cuore (vita extra) appare più spesso',                 col: '#ff2244' },
-  enemy:     { label: 'Più Nemici',      desc: 'Più dinosauri in campo — più punti da guadagnare!',    col: '#4caf50' },
-  paw:       { label: 'Più Zampette',    desc: 'Zampetta (doppio sparo) appare più spesso',            col: '#ff9900' },
-  lightning: { label: 'Più Fulmini',     desc: 'Fulmine (frenesia nemici) appare più spesso',          col: '#ffe000' },
-  laser:     { label: 'Più Laser',       desc: 'Laser (spari penetranti) appare più spesso',           col: '#00ffcc' },
-  pierce:    { label: 'Perforazione +1', desc: 'I proiettili trapassano 1 nemico/ostacolo in più. Si cumula!', col: '#e040fb' },
-  maxheart:  { label: 'Cuore Extra',     desc: 'Aumenta il numero massimo di cuori di 1 per sempre!',         col: '#ff6688' },
-};
 const UPGRADE_KEYS = ['fish','heart','enemy','paw','lightning','laser','pierce','maxheart'];
 
 // Costi: pierce e maxheart iniziano a 15 e scalano +5 per acquisto; gli altri scalano da 5 +2
@@ -473,6 +628,13 @@ function handleInput(e) {
   initAudio();
   const { x: cx, y: cy } = getEvtCoords(e);
   const bx = PAUSE_BTN.x;
+
+  // Language button hit? (works in any state)
+  if (cx >= LANG_BTN.x && cx <= LANG_BTN.x + LANG_BTN.w &&
+      cy >= LANG_BTN.y && cy <= LANG_BTN.y + LANG_BTN.h) {
+    setLang(currentLang === 'en' ? 'it' : 'en');
+    return;
+  }
 
   // Pause button hit?
   if ((STATE === 'playing' || STATE === 'paused') &&
@@ -892,7 +1054,7 @@ function update(now, dt) {
         if (o.hp <= 0) {
           o.dead = true; sfxHitEnemy(true);
           spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
-          spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+          spawnText(o.x + o.w / 2, o.y - 5, T('sp_crack'), '#fff');
         } else {
           sfxHitEnemy(false);
           spawnExplosion(b.x, b.y, '#00ffcc', IS_MOBILE ? 3 : 6);
@@ -902,7 +1064,7 @@ function update(now, dt) {
         spawnExplosion(b.x, b.y, '#e040fb', IS_MOBILE ? 3 : 6);
         o.hp = 0; o.dead = true; sfxHitEnemy(true);
         spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
-        spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+        spawnText(o.x + o.w / 2, o.y - 5, T('sp_crack'), '#fff');
         if (b.pierceLeft <= 0) { b.dead = true; break; }
       } else {
         const dmg = Math.max(1, b.pierceLeft);
@@ -911,7 +1073,7 @@ function update(now, dt) {
         if (o.hp <= 0) {
           o.dead = true; sfxHitEnemy(true);
           spawnExplosion(o.x + o.w / 2, o.y + o.h / 2, oc, IS_MOBILE ? 8 : 16);
-          spawnText(o.x + o.w / 2, o.y - 5, 'CRACK!', '#fff');
+          spawnText(o.x + o.w / 2, o.y - 5, T('sp_crack'), '#fff');
         } else {
           sfxHitEnemy(false);
           spawnExplosion(b.x, b.y, oc, IS_MOBILE ? 3 : 6);
@@ -932,7 +1094,7 @@ function update(now, dt) {
         sfxPowerUp();
         powerupEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#00cfff', IS_MOBILE ? 8 : 18);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '🔥 POWER UP!', '#ff6600');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_power'), '#ff6600');
       } else if (f.type === 'paw') {
         sfxPowerUp();
         doubleShootEnd = now + POWERUP_MS;
@@ -941,30 +1103,30 @@ function update(now, dt) {
         const prevBullets = 1 + Math.floor((pawsCollected - 1) / 3);
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff9900', IS_MOBILE ? 8 : 18);
         if (newBullets > prevBullets) {
-          spawnText(CAT_SCREEN_X + 26, catY - 20, `🐾 +1 PROIETTILE! (${newBullets})`, '#ff9900');
+          spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_bullet', newBullets), '#ff9900');
         } else {
-          spawnText(CAT_SCREEN_X + 26, catY - 20, '🐾 DOPPIO SPARO!', '#ff9900');
+          spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_double'), '#ff9900');
         }
       } else if (f.type === 'heart') {
         sfxPowerUp();
         lives = Math.min(9 + (upgrades ? upgrades.maxheart || 0 : 0), lives + 1);
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ff2244', IS_MOBILE ? 8 : 14);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '❤️ VITA!', '#ff2244');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_heart'), '#ff2244');
       } else if (f.type === 'coin') {
         sfxCoin();
         coins++;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffd700', IS_MOBILE ? 6 : 14);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '+1 moneta', '#ffd700');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_coin'), '#ffd700');
       } else if (f.type === 'lightning') {
         sfxLightning();
         lightningEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#ffe000', IS_MOBILE ? 10 : 22);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '⚡ FRENESIA!', '#ffe000');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_frenzy'), '#ffe000');
       } else if (f.type === 'laser') {
         sfxLaser();
         laserEnd = now + POWERUP_MS;
         spawnExplosion(f.x + f.w/2, fy + f.h/2, '#00ffcc', IS_MOBILE ? 8 : 20);
-        spawnText(CAT_SCREEN_X + 26, catY - 20, '🔫 LASER!', '#00ffcc');
+        spawnText(CAT_SCREEN_X + 26, catY - 20, T('sp_laser'), '#00ffcc');
       }
     }
   }
@@ -1969,16 +2131,16 @@ function drawSpawnStats() {
   const total = fullTable.reduce((s, e) => s + e.w, 0); // totale sul pieno per % corrette
 
   const meta = {
-    lightning: { label: 'Fulmine',  dot: '#ffe000' },
-    fish:      { label: 'Pesciol.', dot: '#00cfff' },
-    paw:       { label: 'Zampet.', dot: '#ff9900' },
-    heart:     { label: 'Cuore',    dot: '#ff2244' },
-    coin:      { label: 'Moneta',   dot: '#ffd700' },
-    laser:     { label: 'Laser',    dot: '#00ffcc' },
-    dino:      { label: 'Dino',     dot: '#4caf50' },
-    rock:      { label: 'Roccia',   dot: '#bdbdbd' },
-    bush:      { label: 'Cespug.',  dot: '#66bb6a' },
-    combo:     { label: 'Combo',    dot: '#ff8a65' },
+    lightning: { label: T('ss_lightning'), dot: '#ffe000' },
+    fish:      { label: T('ss_fish'),      dot: '#00cfff' },
+    paw:       { label: T('ss_paw'),       dot: '#ff9900' },
+    heart:     { label: T('ss_heart'),     dot: '#ff2244' },
+    coin:      { label: T('ss_coin'),      dot: '#ffd700' },
+    laser:     { label: T('ss_laser'),     dot: '#00ffcc' },
+    dino:      { label: T('ss_dino'),      dot: '#4caf50' },
+    rock:      { label: T('ss_rock'),      dot: '#bdbdbd' },
+    bush:      { label: T('ss_bush'),      dot: '#66bb6a' },
+    combo:     { label: T('ss_combo'),     dot: '#ff8a65' },
   };
 
   const gY     = getGY();
@@ -2068,8 +2230,8 @@ function drawHUD(now) {
   ctx.font = 'bold 22px "Fredoka One", cursive';
   ctx.textAlign = 'center';
   ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = 4;
-  ctx.strokeText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
-  ctx.fillStyle = '#fff'; ctx.fillText(`Punti: ${score} / ${targetScore}`, W / 2, 32);
+  ctx.strokeText(T('hud_score', score, targetScore), W / 2, 32);
+  ctx.fillStyle = '#fff'; ctx.fillText(T('hud_score', score, targetScore), W / 2, 32);
 
   // coin counter below score — badge + number
   drawCoinBadge(W / 2 - 28, 44, 9);
@@ -2080,11 +2242,11 @@ function drawHUD(now) {
   ctx.fillStyle = '#ffd700'; ctx.fillText(`${coins}`, W / 2 - 15, 52);
   ctx.textAlign = 'center';
 
-  // level (leave room for pause btn on right)
+  // level (leave room for lang btn + pause btn on right)
   ctx.textAlign = 'right';
-  const lvlTxt = `Livello ${level}`;
-  ctx.strokeText(lvlTxt, W - 68, 32);
-  ctx.fillStyle = '#ffd700'; ctx.fillText(lvlTxt, W - 68, 32);
+  const lvlTxt = T('hud_level', level);
+  ctx.strokeText(lvlTxt, W - 110, 32);
+  ctx.fillStyle = '#ffd700'; ctx.fillText(lvlTxt, W - 110, 32);
   ctx.restore();
 
   drawSpawnStats();
@@ -2109,16 +2271,15 @@ function drawHUD(now) {
     barY += 22;
   }
 
-  if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', '🔥 POWER UP!');
-  if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', '🐾 DOPPIO SPARO!');
-  if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', '⚡ FRENESIA!');
-  if (laser)     drawBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', '🔫 LASER!');
+  if (powered)   drawBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', T('pu_power'));
+  if (dbl)       drawBar((doubleShootEnd - now) / POWERUP_MS, '#ff9900', '#ffe066', T('pu_double'));
+  if (lightning) drawBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', T('pu_frenzy'));
+  if (laser)     drawBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', T('pu_laser'));
 
   // indicatore proiettili permanenti (se > 1)
   const _bullets = 1 + Math.floor((pawsCollected || 0) / 3);
   if (_bullets > 1) {
-    const _nextAt = (Math.floor((pawsCollected || 0) / 3) + 1) * 3;
-    const _prog   = ((pawsCollected || 0) % 3) / 3;
+    const _prog = ((pawsCollected || 0) % 3) / 3;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     drawRoundRect(10, barY, 165, 16, 8); ctx.fill();
@@ -2126,7 +2287,7 @@ function drawHUD(now) {
     drawRoundRect(10, barY, Math.max(4, 165 * _prog), 16, 8); ctx.fill();
     ctx.font = 'bold 11px "Nunito", sans-serif';
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-    ctx.fillText(`🐾 ×${_bullets} proiettili  (${pawsCollected % 3}/3 → prossimo)`, 14, barY + 12);
+    ctx.fillText(T('pu_bullets', _bullets, (pawsCollected || 0) % 3), 14, barY + 12);
     ctx.restore();
   }
 }
@@ -2224,13 +2385,9 @@ function drawStartScreen() {
   }
 
   drawOverlay(
-    '🐱 Leo il Gattino 🐱',
-    [
-      'Il gatto spara automaticamente!',
-      'Clicca / tocca  →  SALTA',
-      'Mangia i 🐟 per il POWER UP!'
-    ],
-    '✨ Clicca ovunque per iniziare ✨'
+    T('title'),
+    [T('start_l1'), T('start_l2'), T('start_l3')],
+    T('start_hint')
   );
 }
 
@@ -2315,9 +2472,9 @@ function drawSceneMobile(now) {
   ctx.textAlign = 'right';
   ctx.strokeStyle = 'rgba(0,0,0,0.75)';
   ctx.lineWidth = 3;
-  ctx.strokeText(`Lv ${level}`, W - 68, 29);
+  ctx.strokeText(T('hud_level', level), W - 110, 29);
   ctx.fillStyle = '#ffd700';
-  ctx.fillText(`Lv ${level}`, W - 68, 29);
+  ctx.fillText(T('hud_level', level), W - 110, 29);
   ctx.restore();
 
   drawSpawnStats();
@@ -2343,12 +2500,12 @@ function drawSceneMobile(now) {
     by += 18;
   }
 
-  if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', 'POWER UP');
-  if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', 'DOUBLE');
-  if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', 'FRENESIA');
-  if (laser)     drawFlatBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', 'LASER');
+  if (powered)   drawFlatBar((powerupEnd     - now) / POWERUP_MS, '#8833ff', '#cc88ff', T('pu_power_s'));
+  if (dbl)       drawFlatBar((doubleShootEnd - now) / POWERUP_MS, '#ff9d00', '#fff07a', T('pu_double_s'));
+  if (lightning) drawFlatBar((lightningEnd   - now) / POWERUP_MS, '#00ccff', '#ffe000', T('pu_frenzy_s'));
+  if (laser)     drawFlatBar((laserEnd       - now) / POWERUP_MS, '#00ffcc', '#b2ffe0', T('pu_laser_s'));
   const _bm = 1 + Math.floor((pawsCollected || 0) / 3);
-  if (_bm > 1) drawFlatBar(((pawsCollected || 0) % 3) / 3, '#ff9900', '#ffcc66', `🐾×${_bm} (${(pawsCollected||0)%3}/3)`);
+  if (_bm > 1) drawFlatBar(((pawsCollected || 0) % 3) / 3, '#ff9900', '#ffcc66', T('pu_bul_s', _bm, (pawsCollected||0)%3));
 
   drawFpsMeter();
 }
@@ -2385,7 +2542,7 @@ function drawShopScreen(now) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd700';
   ctx.shadowColor = '#ff8c00'; ctx.shadowBlur = 14;
-  ctx.fillText(`⭐ Livello ${level} Superato! — Negozio ⭐`, W / 2, py + 44);
+  ctx.fillText(T('shop_title', level), W / 2, py + 44);
   ctx.restore();
 
   // Coin counter
@@ -2394,7 +2551,7 @@ function drawShopScreen(now) {
   ctx.font = 'bold 16px "Fredoka One", cursive';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffd700';
-  ctx.fillText(`${coins} monete disponibili`, W / 2 - 32, py + 73);
+  ctx.fillText(T('shop_coins', coins), W / 2 - 32, py + 73);
   ctx.restore();
 
   // Two upgrade cards
@@ -2405,7 +2562,7 @@ function drawShopScreen(now) {
   const cardY = py + 86;
 
   (shopOffers || []).forEach((key, idx) => {
-    const info = UPGRADE_INFO[key];
+    const info = getUpgradeInfo()[key];
     const cx = px + margin + idx * (cardW + margin);
     const bought = shopOfferBought && shopOfferBought[idx];
     const cost = upgradeCost(key);
@@ -2434,7 +2591,7 @@ function drawShopScreen(now) {
     ctx.font = '12px "Nunito", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#aaa';
-    ctx.fillText(`(acquistato ${upgrades[key]}×)`, cx + cardW / 2, cardY + 43);
+    ctx.fillText(T('shop_times', upgrades[key]), cx + cardW / 2, cardY + 43);
     ctx.restore();
 
     // Description (word-wrap)
@@ -2465,7 +2622,7 @@ function drawShopScreen(now) {
       ctx.font = 'bold 14px "Fredoka One", cursive';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = '#76ff03';
-      ctx.fillText('✓ Acquistato', btnX + btnW / 2, btnY + btnH / 2);
+      ctx.fillText(T('shop_got'), btnX + btnW / 2, btnY + btnH / 2);
       ctx.textBaseline = 'alphabetic';
       ctx.restore();
     } else {
@@ -2479,7 +2636,7 @@ function drawShopScreen(now) {
       ctx.font = 'bold 13px "Fredoka One", cursive';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillStyle = canAfford ? '#fff' : '#666';
-      ctx.fillText(`Acquista (${cost} 💰)`, btnX + btnW / 2, btnY + btnH / 2);
+      ctx.fillText(T('shop_buy', cost), btnX + btnW / 2, btnY + btnH / 2);
       ctx.textBaseline = 'alphabetic';
       ctx.restore();
       if (canAfford) shopBtnRects.push({ idx, x: btnX, y: btnY, w: btnW, h: btnH });
@@ -2497,13 +2654,35 @@ function drawShopScreen(now) {
   ctx.font = 'bold 19px "Fredoka One", cursive';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fff';
-  ctx.fillText('CONTINUA ▶', W / 2, cbY + cbH / 2);
+  ctx.fillText(T('shop_cont'), W / 2, cbY + cbH / 2);
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
   shopContinueBtnRect = { x: cbX, y: cbY, w: cbW, h: cbH };
 
   drawSpawnStats();
   drawFpsMeter();
+}
+
+// ─────────────────────────────────────────────
+//  LANGUAGE TOGGLE BUTTON
+// ─────────────────────────────────────────────
+function drawLangBtn() {
+  const bx = canvas.width - PAUSE_BTN.w - 8 - LANG_BTN.w - 6;
+  LANG_BTN.x = bx; // keep in sync for hit-detection
+  const by = LANG_BTN.y, bw = LANG_BTN.w, bh = LANG_BTN.h;
+  ctx.save();
+  ctx.fillStyle = currentLang === 'en' ? 'rgba(30,60,120,0.85)' : 'rgba(180,0,30,0.85)';
+  drawRoundRect(bx, by, bw, bh, 8); ctx.fill();
+  ctx.strokeStyle = currentLang === 'en' ? '#5599ff' : '#ff6666';
+  ctx.lineWidth = 1.5;
+  drawRoundRect(bx, by, bw, bh, 8); ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px "Nunito", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(currentLang === 'en' ? 'EN' : 'IT', bx + bw / 2, by + bh / 2 + 1);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
 }
 
 // ─────────────────────────────────────────────
@@ -2546,6 +2725,7 @@ function loop(ts) {
 
   if (STATE === 'start') {
     drawStartScreen();
+    drawLangBtn();
 
   } else if (STATE === 'playing' || STATE === 'paused') {
     if (STATE === 'playing') {
@@ -2583,16 +2763,18 @@ function loop(ts) {
       ctx.font = 'bold 56px "Fredoka One", cursive';
       ctx.textAlign = 'center'; ctx.fillStyle = '#ffd700';
       ctx.shadowColor = '#ff8c00'; ctx.shadowBlur = 20;
-      ctx.fillText('⏸ PAUSA', W/2, H/2 - 10);
+      ctx.fillText(T('paused'), W/2, H/2 - 10);
       ctx.shadowBlur = 0;
       ctx.font = '22px "Nunito", sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillText('Clicca ovunque per continuare', W/2, H/2 + 38);
+      ctx.fillText(T('paused_hint'), W/2, H/2 + 38);
       ctx.restore();
     }
+    drawLangBtn();
 
   } else if (STATE === 'shop') {
     drawShopScreen(ts);
+    drawLangBtn();
 
   } else if (STATE === 'levelup') {
     drawBackground();
@@ -2602,20 +2784,22 @@ function loop(ts) {
     drawCat(ts);
     drawHUD(ts);
     drawOverlay(
-      `⭐ Livello ${level} Superato! ⭐`,
-      [`Ottimo lavoro! Punti: ${score}  Monete: ${coins}`, `Prossimo obiettivo: ${getLevelTarget(level+1)} punti`],
-      '✨ Clicca per continuare ✨'
+      T('lvlup_title', level),
+      [T('lvlup_l1', score, coins), T('lvlup_l2', getLevelTarget(level+1))],
+      T('lvlup_hint')
     );
+    drawLangBtn();
 
   } else if (STATE === 'gameover') {
     drawBackground();
     drawOverlay(
-      '💀 Game Over 💀',
-      [`Hai totalizzato ${score} punti`, `al Livello ${level}`, `Monete raccolte: ${coins}`],
+      T('go_title'),
+      [T('go_l1', score), T('go_l2', level), T('go_l3', coins)],
       null,
       'rgba(60,0,0,0.7)',
-      '🔄 GIOCA ANCORA'
+      T('restart')
     );
+    drawLangBtn();
 
   } else if (STATE === 'win') {
     const W2 = canvas.width, H2 = canvas.height;
@@ -2630,12 +2814,13 @@ function loop(ts) {
       ctx.fillRect(cfX, cfY, 6, 4);
     }
     drawOverlay(
-      '🏆 HAI VINTO! 🏆',
-      ['Leo ha sconfitto tutti i dinosauri!', `Punti: ${score}  |  Monete: ${coins}`, 'Sei un campione! 🎉'],
+      T('win_title'),
+      [T('win_l1'), T('win_l2', score, coins), T('win_l3')],
       null,
       null,
-      '🔄 GIOCA ANCORA'
+      T('restart')
     );
+    drawLangBtn();
   }
 
 }
@@ -2646,3 +2831,4 @@ function loop(ts) {
 checkOrientation();
 initLevel(); // pre-init so canvas is ready
 requestAnimationFrame(loop);
+
